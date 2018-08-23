@@ -1,6 +1,8 @@
 # ioeX SPV
 
 ## Summary
+ioeX leveraged Elastos functions to create its owned features and also business cases.
+
 ioeX SPV is a SDK of SPV (Simplified Payment Verification) implementation of the ioeX digital currency.
 The ioeX SPV SDK is a set of encryption algorithm, peer to peer network and SPV related implementation like bloom filter, merkleblock and util methods.
 As an example, this project include a spv wallet implementation located in `spvwallet` folder, it will help you understand how to use this SDK and build your own apps.
