@@ -1,44 +1,41 @@
 package main
 
 import (
-	"os"
+	"fmt"
 
-	"github.com/ioeXNetwork/ioeX.SPV/log"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/account"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/transaction"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/wallet"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
+	"github.com/ioeXNetwork/ioeX.SPV/util"
+	"github.com/ioeXNetwork/ioeX.SPV/wallet"
 
-	"github.com/urfave/cli"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 var Version string
 
-func init() {
-	log.Init(
-		config.Values().PrintLevel,
-		config.Values().MaxPerLogSize,
-		config.Values().MaxLogsSize,
-	)
+func main() {
+	url := fmt.Sprint("http://127.0.0.1:", config.JsonRpcPort, "/spvwallet")
+	wallet.RunClient(Version, url, getSystemAssetId(), func() util.BlockHeader {
+		return util.NewIOEXHeader(&core.Header{})
+	})
 }
 
-func main() {
-	app := cli.NewApp()
-	app.Name = "IOEX SPV WALLET"
-	app.Version = Version
-	app.HelpName = "IOEX SPV WALLET HELP"
-	app.Usage = "command line user interface"
-	app.UsageText = "[global option] command [command options] [args]"
-	app.HideHelp = false
-	app.HideVersion = false
-	//commands
-	app.Commands = []cli.Command{
-		wallet.NewCreateCommand(),
-		wallet.NewChangePasswordCommand(),
-		wallet.NewResetCommand(),
-		account.NewCommand(),
-		transaction.NewCommand(),
+func getSystemAssetId() common.Uint256 {
+	systemToken := &core.Transaction{
+		TxType:         core.RegisterAsset,
+		PayloadVersion: 0,
+		Payload: &core.PayloadRegisterAsset{
+			Asset: core.Asset{
+				Name:      "ELA",
+				Precision: 0x08,
+				AssetType: 0x00,
+			},
+			Amount:     0 * 100000000,
+			Controller: common.Uint168{},
+		},
+		Attributes: []*core.Attribute{},
+		Inputs:     []*core.Input{},
+		Outputs:    []*core.Output{},
+		Programs:   []*core.Program{},
 	}
-
-	app.Run(os.Args)
+	return systemToken.Hash()
 }
