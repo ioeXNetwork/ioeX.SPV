@@ -3,20 +3,18 @@ package net
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
 
-	"github.com/ioeX/ioeX.Utility/p2p"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
+	. "github.com/ioeXNetwork/ioeX.Utility/p2p"
+	. "github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
-type PeerHandler interface {
-	MessageHandler
-	OnDisconnected(peer *Peer)
-}
-
 type Peer struct {
+	// info
 	id         uint64
 	version    uint32
 	services   uint64
@@ -26,24 +24,44 @@ type Peer struct {
 	height     uint64
 	relay      uint8 // 1 for true 0 for false
 
-	p2p.PeerState
-	conn    net.Conn
-	handler PeerHandler
+	PeerState
+	conn net.Conn
 
-	msgHelper *p2p.MsgHelper
+	reader *MsgReader
 }
 
 func (peer *Peer) String() string {
-	return fmt.Sprint(
-		"ID:", peer.id,
-		", Version:", peer.version,
-		", Services:", peer.services,
-		", Port:", peer.port,
-		", LastActive:", peer.lastActive,
-		", Height:", peer.height,
-		", Relay:", peer.relay,
-		", State:", peer.PeerState.String(),
-		", Addr:", peer.Addr().String())
+	return fmt.Sprint("\nPeer: {",
+		"\n\tID:", peer.id,
+		"\n\tVersion:", peer.version,
+		"\n\tServices:", peer.services,
+		"\n\tPort:", peer.port,
+		"\n\tLastActive:", peer.lastActive,
+		"\n\tHeight:", peer.height,
+		"\n\tRelay:", peer.relay,
+		"\n\tState:", peer.PeerState.String(),
+		"\n\tAddr:", peer.Addr().String(),
+		"\n}")
+}
+
+func NewPeer(conn net.Conn) *Peer {
+	peer := new(Peer)
+	peer.conn = conn
+	peer.ip16, peer.port = addrFromConn(conn)
+	peer.reader = NewMsgReader(conn, peer)
+	return peer
+}
+
+func addrFromConn(conn net.Conn) ([16]byte, uint16) {
+	addr := conn.RemoteAddr().String()
+	portIndex := strings.LastIndex(addr, ":")
+	port, _ := strconv.ParseUint(string([]byte(addr)[portIndex+1:]), 10, 16)
+	ip := net.ParseIP(string([]byte(addr)[:portIndex])).To16()
+
+	ip16 := [16]byte{}
+	copy(ip16[:], ip[:])
+
+	return ip16, uint16(port)
 }
 
 func (peer *Peer) ID() uint64 {
@@ -86,8 +104,8 @@ func (peer *Peer) LastActive() time.Time {
 	return peer.lastActive
 }
 
-func (peer *Peer) Addr() *p2p.NetAddress {
-	return p2p.NewNetAddress(peer.services, peer.ip16, peer.port, peer.id)
+func (peer *Peer) Addr() *Addr {
+	return NewPeerAddr(peer.services, peer.ip16, peer.port, peer.id)
 }
 
 func (peer *Peer) Relay() uint8 {
@@ -99,15 +117,14 @@ func (peer *Peer) SetRelay(relay uint8) {
 }
 
 func (peer *Peer) Disconnect() {
-	if peer.State() != p2p.INACTIVITY {
-		peer.SetState(p2p.INACTIVITY)
+	if peer.State() != INACTIVITY {
+		peer.SetState(INACTIVITY)
 		peer.conn.Close()
 	}
 }
 
-func (peer *Peer) SetInfo(msg *msg.Version) {
+func (peer *Peer) SetInfo(msg *Version) {
 	peer.id = msg.Nonce
-	peer.port = msg.Port
 	peer.version = msg.Version
 	peer.services = msg.Services
 	peer.lastActive = time.Now()
@@ -123,46 +140,50 @@ func (peer *Peer) Height() uint64 {
 	return peer.height
 }
 
-func (peer *Peer) OnError(err error) {
+func (peer *Peer) OnDecodeError(err error) {
 	switch err {
-	case p2p.ErrInvalidHeader,
-		p2p.ErrUnmatchedMagic,
-		p2p.ErrMsgSizeExceeded:
-		log.Error(err)
+	case ErrDisconnected:
+		pm.DisconnectPeer(peer)
+	case ErrUnmatchedMagic:
+		log.Error("Decode message error:", ErrUnmatchedMagic)
 		peer.Disconnect()
-	case p2p.ErrDisconnected:
-		peer.handler.OnDisconnected(peer)
 	default:
 		log.Error(err, ", peer id is: ", peer.ID())
 	}
 }
 
-func (peer *Peer) OnMakeMessage(cmd string) (p2p.Message, error) {
-	peer.lastActive = time.Now()
-	return peer.handler.MakeMessage(cmd)
+func (peer *Peer) OnMakeMessage(cmd string) (Message, error) {
+	return pm.makeMessage(cmd)
 }
 
-func (peer *Peer) OnMessageDecoded(msg p2p.Message) {
-	if err := peer.handler.HandleMessage(peer, msg); err != nil {
-		log.Error(err)
-	}
+func (peer *Peer) OnMessageDecoded(msg Message) {
+	pm.handleMessage(peer, msg)
 }
 
 func (peer *Peer) Read() {
-	peer.msgHelper.Read()
+	peer.reader.Read()
 }
 
-func (peer *Peer) Send(msg p2p.Message) {
-	if peer.State() == p2p.INACTIVITY {
+func (peer *Peer) Send(msg Message) {
+	if peer.State() == INACTIVITY {
 		return
 	}
 
-	peer.msgHelper.Write(msg)
-	peer.lastActive = time.Now()
+	buf, err := BuildMessage(msg)
+	if err != nil {
+		log.Error("Serialize message failed, ", err)
+		return
+	}
+
+	_, err = peer.conn.Write(buf)
+	if err != nil {
+		log.Error("Error sending message to peer ", err)
+		pm.DisconnectPeer(peer)
+	}
 }
 
-func (peer *Peer) NewVersionMsg() *msg.Version {
-	version := new(msg.Version)
+func (peer *Peer) NewVersionMsg() *Version {
+	version := new(Version)
 	version.Version = peer.Version()
 	version.Services = peer.Services()
 	version.TimeStamp = uint32(time.Now().UnixNano())

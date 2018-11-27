@@ -6,11 +6,12 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.SPV/db"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type ChainState int
@@ -20,22 +21,29 @@ const (
 	WAITING = ChainState(1)
 )
 
-func (s ChainState) String() string {
-	switch s {
-	case SYNCING:
-		return "SYNCING"
-	case WAITING:
-		return "WAITING"
-	default:
-		return "UNKNOWN"
-	}
-}
-
 const (
 	MaxBlockLocatorHashes = 100
 )
 
 var PowLimit = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(1))
+
+/*
+StateListener is an interface to listen blockchain data change.
+Call AddStateListener() method to register your callbacks to the notify list.
+*/
+type StateListener interface {
+	// This method will be callback after a transaction committed
+	// Notice: this method will be called when commit block
+	OnTxCommitted(tx Transaction, height uint32)
+
+	// This method will be callback after a block committed
+	OnBlockCommitted(bloom.MerkleBlock, []Transaction)
+
+	// This method will be callback when blockchain rollback
+	// height is the deleted data height, for example OnChainRollback(100) means
+	// data on height 100 has been deleted, current chain height will be 99.
+	OnChainRollback(height uint32)
+}
 
 /*
 Blockchain is the database of blocks, also when a new transaction or block commit,
@@ -44,42 +52,28 @@ Blockchain will verify them with stored blocks.
 type Blockchain struct {
 	lock  *sync.RWMutex
 	state ChainState
-	store.HeaderStore
+	db.DataStore
+	stateListeners []StateListener
 }
 
 // Create a instance of *Blockchain
-func NewBlockchain(foundation string, headerStore store.HeaderStore) (*Blockchain, error) {
-	blockchain := &Blockchain{
-		lock:        new(sync.RWMutex),
-		state:       WAITING,
-		HeaderStore: headerStore,
-	}
+func NewBlockchain(dataStore db.DataStore) (*Blockchain, error) {
+	return &Blockchain{
+		lock:      new(sync.RWMutex),
+		state:     WAITING,
+		DataStore: dataStore,
+	}, nil
+}
 
-	// Init genesis header
-	_, err := blockchain.GetBestHeader()
-	if err != nil {
-		var err error
-		var foundationAddress *common.Uint168
-		if len(foundation) == 34 {
-			foundationAddress, err = common.Uint168FromAddress(foundation)
-		} else {
-			foundationAddress, err = common.Uint168FromAddress("8VYXVxKKSAxkmRrfmGpQR2Kc66XhG6m3ta")
-		}
-		if err != nil {
-			return nil, errors.New("parse foundation address failed")
-		}
-		genesisHeader := GenesisHeader(foundationAddress)
-		storeHeader := &store.StoreHeader{Header: *genesisHeader, TotalWork: new(big.Int)}
-		blockchain.PutHeader(storeHeader, true)
-	}
-
-	return blockchain, nil
+// Register a blockchain state listener, multiple registration is supported.
+func (bc *Blockchain) AddStateListener(listener StateListener) {
+	bc.stateListeners = append(bc.stateListeners, listener)
 }
 
 // Close the blockchain
 func (bc *Blockchain) Close() {
 	bc.lock.Lock()
-	bc.HeaderStore.Close()
+	bc.DataStore.Close()
 }
 
 // Set the current state of blockchain
@@ -103,41 +97,37 @@ func (bc *Blockchain) Height() uint32 {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
 
-	tip, err := bc.GetBestHeader()
-	if err != nil {
-		return 0
-	}
-	return tip.Height
+	return bc.DataStore.GetChainHeight()
 }
 
 // Get current blockchain tip
-func (bc *Blockchain) ChainTip() *store.StoreHeader {
+func (bc *Blockchain) ChainTip() *db.StoreHeader {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
 
 	return bc.chainTip()
 }
 
-func (bc *Blockchain) chainTip() *store.StoreHeader {
-	tip, err := bc.GetBestHeader()
+func (bc *Blockchain) chainTip() *db.StoreHeader {
+	tip, err := bc.GetChainTip()
 	if err != nil { // Empty blockchain, return empty header
-		return &store.StoreHeader{TotalWork: new(big.Int)}
+		return &db.StoreHeader{TotalWork: new(big.Int)}
 	}
 	return tip
 }
 
 // Create a block locator which is a array of block hashes stored in blockchain
-func (bc *Blockchain) GetBlockLocatorHashes() []*common.Uint256 {
+func (bc *Blockchain) GetBlockLocatorHashes() []*Uint256 {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
 
-	var ret []*common.Uint256
-	parent, err := bc.GetBestHeader()
+	var ret []*Uint256
+	parent, err := bc.GetChainTip()
 	if err != nil { // No headers stored return empty locator
 		return ret
 	}
 
-	rollback := func(parent *store.StoreHeader, n int) (*store.StoreHeader, error) {
+	rollback := func(parent *db.StoreHeader, n int) (*db.StoreHeader, error) {
 		for i := 0; i < n; i++ {
 			parent, err = bc.GetPrevious(parent)
 			if err != nil {
@@ -168,26 +158,21 @@ func (bc *Blockchain) GetBlockLocatorHashes() []*common.Uint256 {
 	return ret
 }
 
-// IsKnownHeader returns if a header is already stored in database by it's hash
-func (bc *Blockchain) IsKnownHeader(hash *common.Uint256) bool {
+// Commit tx commits a transaction and return is false positive and error
+func (bc *Blockchain) CommitTx(tx Transaction) (bool, error) {
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
-	header, _ := bc.HeaderStore.GetHeader(hash)
-	return header != nil
+
+	return bc.commitTx(tx, 0)
 }
 
-// Commit header add a header into blockchain, return if this header
-// is a new tip, or meet a reorganize (reorgFrom > 0), and error
-func (bc *Blockchain) CommitHeader(header core.Header) (newTip bool, reorgFrom uint32, err error) {
+// Commit block commits a block and transactions with it, return is reorganize, false positives and error
+func (bc *Blockchain) CommitBlock(block bloom.MerkleBlock, txs []Transaction) (bool, int, error) {
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
 
-	err = bc.CheckProofOfWork(header)
-	if err != nil {
-		return newTip, reorgFrom, err
-	}
-
-	commitHeader := &store.StoreHeader{Header: header}
+	header := block.Header
+	commitHeader := &db.StoreHeader{Header: header}
 
 	// Get current chain tip
 	tip := bc.chainTip()
@@ -195,19 +180,28 @@ func (bc *Blockchain) CommitHeader(header core.Header) (newTip bool, reorgFrom u
 
 	// Lookup of the parent header. Otherwise (ophan?) we need to fetch the parent.
 	// If the tip is also the parent of this header, then we can save a database read by skipping
-	var parentHeader *store.StoreHeader
+	var err error
+	var newTip = false
+	var parentHeader *db.StoreHeader
 	if header.Previous.IsEqual(tipHash) {
 		parentHeader = tip
 	} else {
 		parentHeader, err = bc.GetPrevious(commitHeader)
 		if err != nil {
-			return newTip, reorgFrom, fmt.Errorf("Header %s does not extend any known headers", header.Hash().String())
+			// If committing header is genesis header, make an empty parent header
+			if commitHeader.Height == 1 {
+				parentHeader = &db.StoreHeader{TotalWork: new(big.Int)}
+			} else {
+				return false, 0, fmt.Errorf("Header %s does not extend any known headers", header.Hash().String())
+			}
 		}
 	}
 
+	log.Debug("Find parent header height: ", parentHeader.Height)
+
 	// If this block is already the tip, return
 	if tipHash.IsEqual(header.Hash()) {
-		return newTip, reorgFrom, err
+		return false, 0, nil
 	}
 	// Add the work of this header to the total work stored at the previous header
 	cumulativeWork := new(big.Int).Add(parentHeader.TotalWork, CalcWork(header.Bits))
@@ -215,47 +209,102 @@ func (bc *Blockchain) CommitHeader(header core.Header) (newTip bool, reorgFrom u
 
 	// If the cumulative work is greater than the total work of our best header
 	// then we have a new best header. Update the chain tip and check for a reorg.
-	var forkPoint *store.StoreHeader
-	if cumulativeWork.Cmp(tip.TotalWork) > 0 {
+	var reorg = false
+	var reorgPoint *db.StoreHeader
+	if cumulativeWork.Cmp(tip.TotalWork) == 1 {
 		newTip = true
 		// If this header is not extending the previous best header then we have a reorg.
 		if !tipHash.IsEqual(parentHeader.Hash()) {
 			commitHeader.Height = parentHeader.Height + 1
-			forkPoint, err = bc.getCommonAncestor(commitHeader, tip)
+			reorgPoint, err = bc.getCommonAncestor(commitHeader, tip)
 			if err != nil {
 				log.Errorf("error calculating common ancestor: %s", err.Error())
-				return newTip, reorgFrom, err
+				return false, 0, err
 			}
-			log.Infof("Reorganize At block %d, Wiped out %d blocks",
-				int(tip.Height), int(tip.Height-forkPoint.Height))
+			fmt.Printf("Reorganize At block %d, Wiped out %d blocks\n",
+				int(tip.Height), int(tip.Height-reorgPoint.Height))
 		}
 	}
 
 	// If common ancestor exists, means we have an fork chan
 	// so we need to rollback to the last good point.
-	if bc.state != SYNCING && forkPoint != nil {
-		reorgFrom = tip.Height
-		// Save reorganize point as the new tip
-		err = bc.PutHeader(forkPoint, newTip)
+	if reorgPoint != nil {
+		log.Warn("Meet reorganize rollback to: ", reorgPoint.Height)
+		err := bc.rollbackTo(reorgPoint.Height)
 		if err != nil {
-			return newTip, reorgFrom, err
+			fmt.Println(err)
 		}
-		return newTip, reorgFrom, err
+		// Save reorganize point as the new tip
+		err = bc.PutHeader(reorgPoint, newTip)
+		if err != nil {
+			return reorg, 0, err
+		}
+		return true, 0, nil
 	}
 
+	fPositives := 0
+	if newTip {
+		// Save transactions
+		for _, tx := range txs {
+			fPositive, err := bc.commitTx(tx, header.Height)
+			if err != nil {
+				return reorg, 0, err
+			}
+			if fPositive {
+				fPositives++
+			}
+		}
+		// Save current chain height
+		bc.DataStore.PutChainHeight(header.Height)
+	}
+
+	log.Debug("Commit header: ", commitHeader.Hash().String(), ", newTip: ", newTip)
 	// Save header to db
 	err = bc.PutHeader(commitHeader, newTip)
 	if err != nil {
-		return newTip, reorgFrom, err
+		return reorg, 0, err
 	}
 
-	return newTip, reorgFrom, err
+	// Notify block committed
+	bc.notifyBlockCommitted(block, txs)
+
+	log.Debug("Blockchain block committed height: ", bc.chainTip().Height)
+
+	return reorg, fPositives, nil
+}
+
+func (bc *Blockchain) commitTx(tx Transaction, height uint32) (bool, error) {
+	fPositive, err := bc.DataStore.CommitTx(db.NewStoreTx(tx, height))
+	if err != nil {
+		return false, err
+	}
+
+	bc.notifyTxCommitted(tx, height)
+
+	return fPositive, nil
+}
+
+// Rollback data store to the fork point
+func (bc *Blockchain) rollbackTo(forkPoint uint32) error {
+	for height := bc.DataStore.GetChainHeight(); height > forkPoint; height-- {
+		// Rollback TXNs and UTXOs STXOs with it
+		err := bc.DataStore.Rollback(height)
+		if err != nil {
+			fmt.Println("Rollback database failed, height: ", height, ", error: ", err)
+			return err
+		}
+		bc.notifyChainRollback(height)
+	}
+	// Save current chain height
+	bc.DataStore.PutChainHeight(forkPoint)
+
+	return nil
 }
 
 // Returns last header before reorg point
-func (bc *Blockchain) getCommonAncestor(bestHeader, prevTip *store.StoreHeader) (*store.StoreHeader, error) {
+func (bc *Blockchain) getCommonAncestor(bestHeader, prevTip *db.StoreHeader) (*db.StoreHeader, error) {
 	var err error
-	rollback := func(parent *store.StoreHeader, n int) (*store.StoreHeader, error) {
+	rollback := func(parent *db.StoreHeader, n int) (*db.StoreHeader, error) {
 		for i := 0; i < n; i++ {
 			parent, err = bc.GetPrevious(parent)
 			if err != nil {
@@ -296,6 +345,24 @@ func (bc *Blockchain) getCommonAncestor(bestHeader, prevTip *store.StoreHeader) 
 	}
 }
 
+func (bc *Blockchain) notifyBlockCommitted(block bloom.MerkleBlock, txs []Transaction) {
+	for _, listener := range bc.stateListeners {
+		go listener.OnBlockCommitted(block, txs)
+	}
+}
+
+func (bc *Blockchain) notifyTxCommitted(tx Transaction, height uint32) {
+	for _, listener := range bc.stateListeners {
+		go listener.OnTxCommitted(tx, height)
+	}
+}
+
+func (bc *Blockchain) notifyChainRollback(height uint32) {
+	for _, listener := range bc.stateListeners {
+		go listener.OnChainRollback(height)
+	}
+}
+
 func CalcWork(bits uint32) *big.Int {
 	// Return a work value of zero if the passed difficulty bits represent
 	// a negative number. Note this should not happen in practice with valid
@@ -310,7 +377,7 @@ func CalcWork(bits uint32) *big.Int {
 	return new(big.Int).Div(new(big.Int).Lsh(big.NewInt(1), 256), denominator)
 }
 
-func (bc *Blockchain) CheckProofOfWork(header core.Header) error {
+func (bc *Blockchain) CheckProofOfWork(header Header) error {
 	// The target difficulty must be larger than zero.
 	target := CompactToBig(header.Bits)
 	if target.Sign() <= 0 {
@@ -332,7 +399,7 @@ func (bc *Blockchain) CheckProofOfWork(header core.Header) error {
 	return nil
 }
 
-func HashToBig(hash *common.Uint256) *big.Int {
+func HashToBig(hash *Uint256) *big.Int {
 	// A Hash is in little-endian, but the big package wants the bytes in
 	// big-endian, so reverse them.
 	buf := *hash

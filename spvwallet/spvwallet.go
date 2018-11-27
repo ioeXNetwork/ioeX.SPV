@@ -2,23 +2,15 @@ package spvwallet
 
 import (
 	"sync"
-	"time"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/sdk"
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
-	"github.com/ioeX/ioeX.SPV/spvwallet/db"
-	"github.com/ioeX/ioeX.SPV/spvwallet/rpc"
+	. "github.com/ioeXNetwork/ioeX.SPV/db"
+	"github.com/ioeXNetwork/ioeX.SPV/sdk"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/rpc"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
-	"github.com/ioeX/ioeX.MainChain/core"
-)
-
-const (
-	MaxUnconfirmedTime = time.Minute * 30
-	MaxTxIdCached      = 1000
-	MaxConnections     = 12
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 func Init(clientId uint64, seeds []string) (*SPVWallet, error) {
@@ -26,7 +18,7 @@ func Init(clientId uint64, seeds []string) (*SPVWallet, error) {
 	wallet := new(SPVWallet)
 
 	// Initialize headers db
-	wallet.headerStore, err = db.NewHeadersDB()
+	wallet.headers, err = db.NewHeadersDB()
 	if err != nil {
 		return nil, err
 	}
@@ -37,43 +29,31 @@ func Init(clientId uint64, seeds []string) (*SPVWallet, error) {
 		return nil, err
 	}
 
-	// Initialize txs cache
-	wallet.txIds = NewTxIdCache(MaxTxIdCached)
-
 	// Initialize P2P network client
-	client, err := sdk.GetSPVClient(config.Values().Magic, clientId, seeds, MaxConnections, MaxConnections)
+	client, err := sdk.GetSPVClient(sdk.TypeMainNet, clientId, seeds)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize spv service
-	wallet.SPVService, err = sdk.GetSPVService(client, config.Values().Foundation, wallet.headerStore, wallet)
+	wallet.SPVService, err = sdk.GetSPVService(client, wallet, wallet.getBloomFilter)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize RPC server
-	server := rpc.InitServer()
-	server.NotifyNewAddress = wallet.NotifyNewAddress
-	server.SendTransaction = wallet.SPVService.SendTransaction
-	wallet.rpcServer = server
+	wallet.rpcServer = rpc.InitServer(wallet)
 
 	return wallet, nil
-}
-
-type DataListener interface {
-	OnNewBlock(block *msg.MerkleBlock, txs []*core.Transaction)
-	OnRollback(height uint32)
 }
 
 type SPVWallet struct {
 	sync.Mutex
 	sdk.SPVService
-	rpcServer   *rpc.Server
-	headerStore *db.HeadersDB
-	dataStore   db.DataStore
-	txIds       *TxIdCache
-	filter      *sdk.AddrFilter
+	rpcServer *rpc.Server
+	headers   db.Headers
+	dataStore db.DataStore
+	filter    *sdk.AddrFilter
 }
 
 func (wallet *SPVWallet) Start() {
@@ -86,60 +66,56 @@ func (wallet *SPVWallet) Stop() {
 	wallet.rpcServer.Close()
 }
 
-func (wallet *SPVWallet) GetData() ([]*common.Uint168, []*core.OutPoint) {
-	utxos, _ := wallet.dataStore.UTXOs().GetAll()
-	stxos, _ := wallet.dataStore.STXOs().GetAll()
+func (wallet *SPVWallet) Headers() db.Headers {
+	return wallet.headers
+}
 
-	outpoints := make([]*core.OutPoint, 0, len(utxos)+len(stxos))
-	for _, utxo := range utxos {
-		outpoints = append(outpoints, &utxo.Op)
-	}
-	for _, stxo := range stxos {
-		outpoints = append(outpoints, &stxo.Op)
-	}
+func (wallet *SPVWallet) DataStore() db.DataStore {
+	return wallet.dataStore
+}
 
-	return wallet.getAddrFilter().GetAddrs(), outpoints
+// Save a header to database
+func (wallet *SPVWallet) PutHeader(header *StoreHeader, newTip bool) error {
+	return wallet.headers.Put(header, newTip)
+}
+
+// Get previous block of the given header
+func (wallet *SPVWallet) GetPrevious(header *StoreHeader) (*StoreHeader, error) {
+	return wallet.headers.GetPrevious(header)
+}
+
+// Get full header with it's hash
+func (wallet *SPVWallet) GetHeader(hash Uint256) (*StoreHeader, error) {
+	return wallet.headers.GetHeader(hash)
+}
+
+// Get the header on chain tip
+func (wallet *SPVWallet) GetChainTip() (*StoreHeader, error) {
+	return wallet.headers.GetTip()
+}
+
+// Save chain height to database
+func (wallet *SPVWallet) PutChainHeight(height uint32) {
+	wallet.dataStore.Info().SaveChainHeight(height)
+}
+
+// Get chain height from database
+func (wallet *SPVWallet) GetChainHeight() uint32 {
+	return wallet.dataStore.Info().ChainHeight()
 }
 
 // Commit a transaction return if this is a false positive and error
-func (wallet *SPVWallet) CommitTx(tx *core.Transaction, height uint32) (bool, error) {
-	txId := tx.Hash()
-
-	sh, ok := wallet.txIds.Get(txId)
-	if ok && (sh > 0 || (sh == 0 && height == 0)) {
-		return false, nil
-	}
-
-	// Do not check double spends when syncing
-	if wallet.SPVService.ChainState() == sdk.WAITING {
-		dubs, err := wallet.checkDoubleSpends(tx)
-		if err != nil {
-			return false, nil
-		}
-		if len(dubs) > 0 {
-			if height == 0 {
-				return false, nil
-			} else {
-				// Rollback any double spend transactions
-				for _, dub := range dubs {
-					if err := wallet.dataStore.RollbackTx(dub); err != nil {
-						return false, nil
-					}
-				}
-			}
-		}
-	}
-
+func (wallet *SPVWallet) CommitTx(storeTx *StoreTx) (bool, error) {
 	hits := 0
 	// Save UTXOs
-	for index, output := range tx.Outputs {
+	for index, output := range storeTx.Data.Outputs {
 		// Filter address
 		if wallet.getAddrFilter().ContainAddr(output.ProgramHash) {
 			var lockTime uint32
-			if tx.TxType == core.CoinBase {
-				lockTime = height + 100
+			if storeTx.Data.TxType == CoinBase {
+				lockTime = storeTx.Height + 100
 			}
-			utxo := ToUTXO(txId, height, index, output.Value, lockTime)
+			utxo := ToUTXO(storeTx.TxId, storeTx.Height, index, output.Value, lockTime)
 			err := wallet.dataStore.UTXOs().Put(&output.ProgramHash, utxo)
 			if err != nil {
 				return false, err
@@ -149,9 +125,9 @@ func (wallet *SPVWallet) CommitTx(tx *core.Transaction, height uint32) (bool, er
 	}
 
 	// Put spent UTXOs to STXOs
-	for _, input := range tx.Inputs {
+	for _, input := range storeTx.Data.Inputs {
 		// Try to move UTXO to STXO, if a UTXO in database was spent, it will be moved to STXO
-		err := wallet.dataStore.STXOs().FromUTXO(&input.Previous, &txId, height)
+		err := wallet.dataStore.STXOs().FromUTXO(&input.Previous, &storeTx.TxId, storeTx.Height)
 		if err == nil {
 			hits++
 		}
@@ -163,58 +139,59 @@ func (wallet *SPVWallet) CommitTx(tx *core.Transaction, height uint32) (bool, er
 	}
 
 	// Save transaction
-	err := wallet.dataStore.Txs().Put(db.NewTx(*tx, height))
+	err := wallet.dataStore.Txs().Put(storeTx)
 	if err != nil {
 		return false, err
 	}
 
-	wallet.txIds.Add(txId, height)
-
 	return false, nil
 }
 
-func (wallet *SPVWallet) OnBlockCommitted(block *msg.MerkleBlock, txs []*core.Transaction) {
-	wallet.dataStore.Chain().PutHeight(block.Header.(*core.Header).Height)
-
-	// Check unconfirmed transaction timeout
-	if wallet.ChainState() == sdk.WAITING {
-		// Get all unconfirmed transactions
-		txs, err := wallet.dataStore.Txs().GetAllFrom(0)
-		if err != nil {
-			log.Debugf("Get unconfirmed transactions failed, error %s", err.Error())
-			return
-		}
-		now := time.Now()
-		for _, tx := range txs {
-			if now.After(tx.Timestamp.Add(MaxUnconfirmedTime)) {
-				err = wallet.dataStore.RollbackTx(&tx.TxId)
-				if err != nil {
-					log.Errorf("Rollback timeout transaction %s failed, error %s", tx.TxId.String(), err.Error())
-				}
-			}
-		}
-	}
-}
-
 // Rollback chain data on the given height
-func (wallet *SPVWallet) OnRollback(height uint32) error {
+func (wallet *SPVWallet) Rollback(height uint32) error {
 	return wallet.dataStore.Rollback(height)
 }
 
-func ToUTXO(txId common.Uint256, height uint32, index int, value common.Fixed64, lockTime uint32) *db.UTXO {
+// Reset database, clear all data
+func (wallet *SPVWallet) Reset() error {
+	err := wallet.headers.Reset()
+	if err != nil {
+		return err
+	}
+	err = wallet.dataStore.Reset()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Close the database
+func (wallet *SPVWallet) Close() {
+	wallet.headers.Close()
+	wallet.dataStore.Close()
+}
+
+func ToUTXO(txId Uint256, height uint32, index int, value Fixed64, lockTime uint32) *db.UTXO {
 	utxo := new(db.UTXO)
-	utxo.Op = *core.NewOutPoint(txId, uint16(index))
+	utxo.Op = *NewOutPoint(txId, uint16(index))
 	utxo.Value = value
 	utxo.LockTime = lockTime
 	utxo.AtHeight = height
 	return utxo
 }
 
-func (wallet *SPVWallet) NotifyNewAddress(hash []byte) {
+func (wallet *SPVWallet) NotifyNewAddress(hash []byte) error {
 	// Reload address filter to include new address
 	wallet.loadAddrFilter()
 	// Broadcast filterload message to connected peers
-	wallet.ReloadFilter()
+	wallet.BroadCastMessage(wallet.getBloomFilter().GetFilterLoadMsg())
+	return nil
+}
+
+func (wallet *SPVWallet) SendTransaction(tx Transaction) error {
+	// Broadcast transaction to connected peers
+	wallet.BroadCastMessage(&tx)
+	return nil
 }
 
 func (wallet *SPVWallet) getAddrFilter() *sdk.AddrFilter {
@@ -233,35 +210,28 @@ func (wallet *SPVWallet) loadAddrFilter() *sdk.AddrFilter {
 	return wallet.filter
 }
 
-// checkDoubleSpends takes a transaction and compares it with
-// all transactions in the db.  It returns a slice of all txIds in the db
-// which are double spent by the received tx.
-func (wallet *SPVWallet) checkDoubleSpends(tx *core.Transaction) ([]*common.Uint256, error) {
-	var dubs []*common.Uint256
-	txId := tx.Hash()
-	txs, err := wallet.dataStore.Txs().GetAll()
-	if err != nil {
-		return nil, err
+func (wallet *SPVWallet) getBloomFilter() *bloom.Filter {
+	wallet.Lock()
+	defer wallet.Unlock()
+
+	addrs := wallet.getAddrFilter().GetAddrs()
+	utxos, _ := wallet.dataStore.UTXOs().GetAll()
+	stxos, _ := wallet.dataStore.STXOs().GetAll()
+
+	elements := uint32(len(addrs) + len(utxos) + len(stxos))
+	filter := sdk.NewBloomFilter(elements)
+
+	for _, addr := range addrs {
+		filter.Add(addr.Bytes())
 	}
-	for _, compTx := range txs {
-		// Skip coinbase transaction
-		if compTx.Data.IsCoinBaseTx() {
-			continue
-		}
-		// Skip duplicate transaction
-		compTxId := compTx.Data.Hash()
-		if compTxId.IsEqual(txId) {
-			continue
-		}
-		for _, txIn := range tx.Inputs {
-			for _, compIn := range compTx.Data.Inputs {
-				if txIn.Previous.IsEqual(compIn.Previous) {
-					// Found double spend
-					dubs = append(dubs, &compTxId)
-					break // back to txIn loop
-				}
-			}
-		}
+
+	for _, utxo := range utxos {
+		filter.AddOutPoint(&utxo.Op)
 	}
-	return dubs, nil
+
+	for _, stxo := range stxos {
+		filter.AddOutPoint(&stxo.Op)
+	}
+
+	return filter
 }

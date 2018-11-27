@@ -1,16 +1,17 @@
-package: github.com/ioeX/ioeX.SPV
+package: github.com/ioeXNetwork/ioeX.SPV
 import:
-- package: golang.org/x/crypto
-  repo:  https://github.com/golang/crypto
-- package: golang.org/x/sys
-  repo:  https://github.com/golang/sys
-- package: github.com/howeyc/gopass
+- package: github.com/ioeXNetwork/ioeX.Utility
+  version: dev
+- package: github.com/AlexpanXX/gopass
 - package: github.com/boltdb/bolt
 - package: github.com/cevaris/ordered_map
-- package: github.com/ioeX/ioeX.Utility
-- package: github.com/ioeX/ioeX.MainChain
-  subpackages:
-  - bloom
-  - core
+- package: github.com/itchyny/base58-go
 - package: github.com/mattn/go-sqlite3
 - package: github.com/urfave/cli
+- package: github.com/golang/crypto
+  subpackages:
+  - ripemd160
+  - ssh/terminal
+ignore:
+  - golang.org/x/sys/unix
+  - golang.org/x/sys/windows

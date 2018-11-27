@@ -2,7 +2,7 @@ package db
 
 import (
 	"fmt"
-	"github.com/ioeX/ioeX.Utility/common"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type STXO struct {
@@ -13,14 +13,14 @@ type STXO struct {
 	SpendHeight uint32
 
 	// The tx that consumed it
-	SpendTxId common.Uint256
+	SpendTxId Uint256
 }
 
 func (stxo *STXO) String() string {
 	return fmt.Sprint(
 		"STXO:{",
 		"UTXO:{",
-		"Op:{TxId:", stxo.Op.TxID.String(), ", Index:", stxo.Op.Index, "},",
+		"Op:{TxID:", stxo.Op.TxID.String(), ", Index:", stxo.Op.Index, "},",
 		"Value:", stxo.Value.String(), ",",
 		"LockTime:", stxo.LockTime, ",",
 		"AtHeight:", stxo.AtHeight, "},",

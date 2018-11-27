@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const CreateSTXOsDB = `CREATE TABLE IF NOT EXISTS STXOs(
@@ -23,7 +23,7 @@ type STXOsDB struct {
 	*sql.DB
 }
 
-func NewSTXOsDB(db *sql.DB, lock *sync.RWMutex) (*STXOsDB, error) {
+func NewSTXOsDB(db *sql.DB, lock *sync.RWMutex) (STXOs, error) {
 	_, err := db.Exec(CreateSTXOsDB)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func NewSTXOsDB(db *sql.DB, lock *sync.RWMutex) (*STXOsDB, error) {
 }
 
 // Move a UTXO to STXO
-func (db *STXOsDB) FromUTXO(outPoint *core.OutPoint, spendTxId *common.Uint256, spendHeight uint32) error {
+func (db *STXOsDB) FromUTXO(outPoint *OutPoint, spendTxId *Uint256, spendHeight uint32) error {
 	db.Lock()
 	defer db.Unlock()
 
@@ -40,7 +40,6 @@ func (db *STXOsDB) FromUTXO(outPoint *core.OutPoint, spendTxId *common.Uint256, 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
 
 	sql := `INSERT OR REPLACE INTO STXOs(OutPoint, Value, LockTime, AtHeight, ScriptHash, SpendHash, SpendHeight)
 			SELECT UTXOs.OutPoint, UTXOs.Value, UTXOs.LockTime, UTXOs.AtHeight, UTXOs.ScriptHash, ?, ? FROM UTXOs
@@ -59,7 +58,7 @@ func (db *STXOsDB) FromUTXO(outPoint *core.OutPoint, spendTxId *common.Uint256, 
 }
 
 // get a stxo from database
-func (db *STXOsDB) Get(outPoint *core.OutPoint) (*STXO, error) {
+func (db *STXOsDB) Get(outPoint *OutPoint) (*STXO, error) {
 	db.RLock()
 	defer db.RUnlock()
 
@@ -75,14 +74,14 @@ func (db *STXOsDB) Get(outPoint *core.OutPoint) (*STXO, error) {
 		return nil, err
 	}
 
-	var value *common.Fixed64
-	value, err = common.Fixed64FromBytes(valueBytes)
+	var value *Fixed64
+	value, err = Fixed64FromBytes(valueBytes)
 	if err != nil {
 		return nil, err
 	}
 
 	var utxo = UTXO{Op: *outPoint, Value: *value, LockTime: lockTime, AtHeight: atHeight}
-	spendHash, err := common.Uint256FromBytes(spendHashBytes)
+	spendHash, err := Uint256FromBytes(spendHashBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -91,14 +90,14 @@ func (db *STXOsDB) Get(outPoint *core.OutPoint) (*STXO, error) {
 }
 
 // get stxos of the given script hash from database
-func (db *STXOsDB) GetAddrAll(hash *common.Uint168) ([]*STXO, error) {
+func (db *STXOsDB) GetAddrAll(hash *Uint168) ([]*STXO, error) {
 	db.RLock()
 	defer db.RUnlock()
 
 	sql := "SELECT OutPoint, Value, LockTime, AtHeight, SpendHash, SpendHeight FROM STXOs WHERE ScriptHash=?"
 	rows, err := db.Query(sql, hash.Bytes())
 	if err != nil {
-		return nil, err
+		return []*STXO{}, err
 	}
 	defer rows.Close()
 
@@ -132,17 +131,17 @@ func (db *STXOsDB) getSTXOs(rows *sql.Rows) ([]*STXO, error) {
 			return stxos, err
 		}
 
-		outPoint, err := core.OutPointFromBytes(opBytes)
+		outPoint, err := OutPointFromBytes(opBytes)
 		if err != nil {
 			return stxos, err
 		}
-		var value *common.Fixed64
-		value, err = common.Fixed64FromBytes(valueBytes)
+		var value *Fixed64
+		value, err = Fixed64FromBytes(valueBytes)
 		if err != nil {
 			return stxos, err
 		}
 		var utxo = UTXO{Op: *outPoint, Value: *value, LockTime: lockTime, AtHeight: atHeight}
-		spendHash, err := common.Uint256FromBytes(spendHashBytes)
+		spendHash, err := Uint256FromBytes(spendHashBytes)
 		if err != nil {
 			return stxos, err
 		}
@@ -154,7 +153,7 @@ func (db *STXOsDB) getSTXOs(rows *sql.Rows) ([]*STXO, error) {
 }
 
 // delete a stxo from database
-func (db *STXOsDB) Delete(outPoint *core.OutPoint) error {
+func (db *STXOsDB) Delete(outPoint *OutPoint) error {
 	db.Lock()
 	defer db.Unlock()
 

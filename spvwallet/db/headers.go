@@ -1,19 +1,39 @@
 package db
 
 import (
-	"errors"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.SPV/store"
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/db"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 
 	"github.com/boltdb/bolt"
 	"github.com/cevaris/ordered_map"
 )
+
+type Headers interface {
+	// Add a new header to blockchain
+	Put(header *db.StoreHeader, newTip bool) error
+
+	// Get previous block of the given header
+	GetPrevious(header *db.StoreHeader) (*db.StoreHeader, error)
+
+	// Get full header with it's hash
+	GetHeader(hash common.Uint256) (*db.StoreHeader, error)
+
+	// Get the header on chain tip
+	GetTip() (*db.StoreHeader, error)
+
+	// Reset database, clear all data
+	Reset() error
+
+	// Close db
+	Close()
+}
 
 // HeadersDB implements Headers using bolt DB
 type HeadersDB struct {
@@ -28,7 +48,7 @@ var (
 	KEYChainTip = []byte("ChainTip")
 )
 
-func NewHeadersDB() (*HeadersDB, error) {
+func NewHeadersDB() (Headers, error) {
 	db, err := bolt.Open("headers.bin", 0644, &bolt.Options{InitialMmapSize: 5000000})
 	if err != nil {
 		return nil, err
@@ -58,12 +78,12 @@ func NewHeadersDB() (*HeadersDB, error) {
 }
 
 func (h *HeadersDB) initCache() {
-	best, err := h.GetBestHeader()
+	best, err := h.GetTip()
 	if err != nil {
 		return
 	}
 	h.cache.tip = best
-	headers := []*store.StoreHeader{best}
+	headers := []*db.StoreHeader{best}
 	for i := 0; i < 99; i++ {
 		sh, err := h.GetPrevious(best)
 		if err != nil {
@@ -77,7 +97,7 @@ func (h *HeadersDB) initCache() {
 }
 
 // Add a new header to blockchain
-func (h *HeadersDB) PutHeader(header *store.StoreHeader, newTip bool) error {
+func (h *HeadersDB) Put(header *db.StoreHeader, newTip bool) error {
 	h.Lock()
 	defer h.Unlock()
 
@@ -109,15 +129,15 @@ func (h *HeadersDB) PutHeader(header *store.StoreHeader, newTip bool) error {
 }
 
 // Get previous block of the given header
-func (h *HeadersDB) GetPrevious(header *store.StoreHeader) (*store.StoreHeader, error) {
+func (h *HeadersDB) GetPrevious(header *db.StoreHeader) (*db.StoreHeader, error) {
 	if header.Height == 1 {
-		return &store.StoreHeader{TotalWork: new(big.Int)}, nil
+		return &db.StoreHeader{TotalWork: new(big.Int)}, nil
 	}
-	return h.GetHeader(&header.Previous)
+	return h.GetHeader(header.Previous)
 }
 
 // Get full header with it's hash
-func (h *HeadersDB) GetHeader(hash *common.Uint256) (header *store.StoreHeader, err error) {
+func (h *HeadersDB) GetHeader(hash common.Uint256) (header *db.StoreHeader, err error) {
 	h.RLock()
 	defer h.RUnlock()
 
@@ -144,7 +164,7 @@ func (h *HeadersDB) GetHeader(hash *common.Uint256) (header *store.StoreHeader, 
 }
 
 // Get the header on chain tip
-func (h *HeadersDB) GetBestHeader() (header *store.StoreHeader, err error) {
+func (h *HeadersDB) GetTip() (header *db.StoreHeader, err error) {
 	h.RLock()
 	defer h.RUnlock()
 
@@ -163,7 +183,8 @@ func (h *HeadersDB) GetBestHeader() (header *store.StoreHeader, err error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("Headers db get tip error %s", err.Error())
+		log.Error("Headers db get tip err,", err)
+		return nil, err
 	}
 
 	return header, err
@@ -190,13 +211,13 @@ func (h *HeadersDB) Close() {
 	log.Debug("Headers DB closed")
 }
 
-func getHeader(tx *bolt.Tx, bucket []byte, key []byte) (*store.StoreHeader, error) {
+func getHeader(tx *bolt.Tx, bucket []byte, key []byte) (*db.StoreHeader, error) {
 	headerBytes := tx.Bucket(bucket).Get(key)
 	if headerBytes == nil {
 		return nil, errors.New(fmt.Sprintf("Header %s does not exist in database", hex.EncodeToString(key)))
 	}
 
-	var header store.StoreHeader
+	var header db.StoreHeader
 	err := header.Deserialize(headerBytes)
 	if err != nil {
 		return nil, err
@@ -208,7 +229,7 @@ func getHeader(tx *bolt.Tx, bucket []byte, key []byte) (*store.StoreHeader, erro
 type HeaderCache struct {
 	sync.RWMutex
 	size    int
-	tip     *store.StoreHeader
+	tip     *db.StoreHeader
 	headers *ordered_map.OrderedMap
 }
 
@@ -227,7 +248,7 @@ func (cache *HeaderCache) pop() {
 	}
 }
 
-func (cache *HeaderCache) Set(header *store.StoreHeader) {
+func (cache *HeaderCache) Set(header *db.StoreHeader) {
 	cache.Lock()
 	defer cache.Unlock()
 
@@ -237,7 +258,7 @@ func (cache *HeaderCache) Set(header *store.StoreHeader) {
 	cache.headers.Set(header.Hash().String(), header)
 }
 
-func (cache *HeaderCache) Get(hash *common.Uint256) (*store.StoreHeader, error) {
+func (cache *HeaderCache) Get(hash common.Uint256) (*db.StoreHeader, error) {
 	cache.RLock()
 	defer cache.RUnlock()
 
@@ -245,5 +266,5 @@ func (cache *HeaderCache) Get(hash *common.Uint256) (*store.StoreHeader, error) 
 	if !ok {
 		return nil, errors.New("Header not found in cache ")
 	}
-	return sh.(*store.StoreHeader), nil
+	return sh.(*db.StoreHeader), nil
 }

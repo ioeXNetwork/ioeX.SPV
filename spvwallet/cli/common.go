@@ -1,18 +1,18 @@
 package cli
 
 import (
-	"os"
-	"fmt"
 	"bufio"
 	"errors"
-	"strings"
+	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
-	walt "github.com/ioeX/ioeX.SPV/spvwallet"
-	"github.com/ioeX/ioeX.SPV/spvwallet/db"
+	walt "github.com/ioeXNetwork/ioeX.SPV/spvwallet"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
 
-	"github.com/ioeX/ioeX.Utility/common"
 	"github.com/howeyc/gopass"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 	"github.com/urfave/cli"
 )
 

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/ioeX/ioeX.Utility/common"
 )
 
 const (
@@ -19,11 +19,11 @@ type SQLiteDB struct {
 	*sync.RWMutex
 	*sql.DB
 
-	chain *ChainDB
-	addrs *AddrsDB
-	txs   *TxsDB
-	utxos *UTXOsDB
-	stxos *STXOsDB
+	info  Info
+	addrs Addrs
+	txs   Txs
+	utxos UTXOs
+	stxos STXOs
 }
 
 func NewSQLiteDB() (*SQLiteDB, error) {
@@ -35,8 +35,8 @@ func NewSQLiteDB() (*SQLiteDB, error) {
 	// Use the same lock
 	lock := new(sync.RWMutex)
 
-	// Create chain db
-	chainDB, err := NewChainDB(db, lock)
+	// Create info db
+	infoDB, err := NewInfoDB(db, lock)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func NewSQLiteDB() (*SQLiteDB, error) {
 		RWMutex: lock,
 		DB:      db,
 
-		chain: chainDB,
+		info:  infoDB,
 		addrs: addrsDB,
 		utxos: utxosDB,
 		stxos: stxosDB,
@@ -73,8 +73,8 @@ func NewSQLiteDB() (*SQLiteDB, error) {
 	}, nil
 }
 
-func (db *SQLiteDB) Chain() Chain {
-	return db.chain
+func (db *SQLiteDB) Info() Info {
+	return db.info
 }
 
 func (db *SQLiteDB) Addrs() Addrs {
@@ -101,7 +101,6 @@ func (db *SQLiteDB) Rollback(height uint32) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
 
 	// Rollback UTXOs
 	_, err = tx.Exec("DELETE FROM UTXOs WHERE AtHeight=?", height)
@@ -129,90 +128,6 @@ func (db *SQLiteDB) Rollback(height uint32) error {
 	return tx.Commit()
 }
 
-func (db *SQLiteDB) RollbackTx(txId *common.Uint256) error {
-	db.Lock()
-	defer db.Unlock()
-
-	return db.rollbackTx(txId)
-}
-
-func (db *SQLiteDB) rollbackTx(txId *common.Uint256) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// Get unconfirmed STXOs
-	rows, err := db.Query(
-		"SELECT OutPoint, Value, LockTime, AtHeight, SpendHash, SpendHeight FROM STXOs WHERE SpendHeight=?",0)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	stxos, err := db.stxos.getSTXOs(rows)
-	if err != nil {
-		return err
-	}
-
-	for _, stxo := range stxos {
-		outpoint := stxo.Op.Bytes()
-		if txId.IsEqual(stxo.SpendTxId) {
-			// Restore UTXO
-			_, err = tx.Exec(`INSERT OR REPLACE INTO UTXOs(OutPoint, Value, LockTime, AtHeight, ScriptHash)
-			SELECT OutPoint, Value, LockTime, AtHeight, ScriptHash FROM STXOs WHERE OutPoint=?`, outpoint)
-			if err != nil {
-				return err
-			}
-			// Delele STXO
-			_, err = tx.Exec("DELETE FROM STXOs WHERE OutPoint=?", outpoint)
-			if err != nil {
-				return err
-			}
-		}
-		if txId.IsEqual(stxo.UTXO.Op.TxID) {
-			// Delele STXO
-			_, err = tx.Exec("DELETE FROM STXOs WHERE OutPoint=?", outpoint)
-			if err != nil {
-				return err
-			}
-			if err := db.rollbackTx(&stxo.SpendTxId); err != nil {
-				return err
-			}
-		}
-	}
-	// Get unconfirmed UTXOs
-	rows, err = db.Query("SELECT OutPoint, Value, LockTime, AtHeight FROM UTXOs WHERE AtHeight=?", 0)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	utxos, err := db.utxos.getUTXOs(rows)
-	if err != nil {
-		return err
-	}
-
-	for _, utxo := range utxos {
-		if txId.IsEqual(utxo.Op.TxID) {
-			// Delele UTXO
-			_, err = tx.Exec("DELETE FROM UTXOs WHERE OutPoint=?", utxo.Op.Bytes())
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	// Delele transaction
-	_, err = tx.Exec("DELETE FROM TXNs WHERE Hash=?", txId.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
 func (db *SQLiteDB) Reset() error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -220,7 +135,7 @@ func (db *SQLiteDB) Reset() error {
 	}
 
 	// Drop all tables except Addrs
-	_, err = tx.Exec(`DROP TABLE IF EXISTS Chain;
+	_, err = tx.Exec(`DROP TABLE IF EXISTS Info;
 							DROP TABLE IF EXISTS UTXOs;
 							DROP TABLE IF EXISTS STXOs;
 							DROP TABLE IF EXISTS TXNs;`)

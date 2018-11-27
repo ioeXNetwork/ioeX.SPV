@@ -1,44 +1,33 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p"
 )
 
 type P2PClientImpl struct {
-	magic      uint32
-	maxMsgSize uint32
-
-	seeds          []string
-	minOutbound    int
-	maxConnections int
-	pm             *net.PeerManager
+	magic uint32
+	seeds []string
+	pm    *net.PeerManager
 }
 
-func NewP2PClientImpl(magic, maxMsgSize uint32, seeds []string, minOutbound, maxConnections int) *P2PClientImpl {
-	return &P2PClientImpl{
-		magic:          magic,
-		maxMsgSize:     maxMsgSize,
-		seeds:          seeds,
-		minOutbound:    minOutbound,
-		maxConnections: maxConnections,
-	}
-}
-
-func (c *P2PClientImpl) InitLocalPeer(initLocal func(peer *net.Peer)) {
+func (client *P2PClientImpl) InitLocalPeer(initLocal func(peer *net.Peer)) {
+	// Set Magic number of the P2P network
+	p2p.Magic = client.magic
 	// Create peer manager of the P2P network
 	local := new(net.Peer)
 	initLocal(local)
-	c.pm = net.NewPeerManager(c.magic, c.maxMsgSize, c.seeds, c.minOutbound, c.maxConnections, local)
+	client.pm = net.InitPeerManager(local, client.seeds)
 }
 
-func (c *P2PClientImpl) SetMessageHandler(msgHandler net.MessageHandler) {
-	c.pm.SetMessageHandler(msgHandler)
+func (client *P2PClientImpl) SetMessageHandler(msgHandler net.MessageHandler) {
+	client.pm.SetMessageHandler(msgHandler)
 }
 
-func (c *P2PClientImpl) Start() {
-	c.pm.Start()
+func (client *P2PClientImpl) Start() {
+	client.pm.Start()
 }
 
-func (c *P2PClientImpl) PeerManager() *net.PeerManager {
-	return c.pm
+func (client *P2PClientImpl) PeerManager() *net.PeerManager {
+	return client.pm
 }

@@ -2,33 +2,35 @@ package rpc
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 
-	"github.com/ioeX/ioeX.SPV/log"
-
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
 )
 
-func InitServer() *Server {
+type RequestHandler interface {
+	NotifyNewAddress(hash []byte) error
+	SendTransaction(Transaction) error
+}
+
+func InitServer(handler RequestHandler) *Server {
 	server := new(Server)
-	server.Server = http.Server{Addr: fmt.Sprint(":", RPCPort)}
+	server.Server = http.Server{Addr: ":" + RPCPort}
 	server.methods = map[string]func(Req) Resp{
-		"notifynewaddress": server.notifyNewAddress,
-		"sendtransaction":  server.sendTransaction,
+		"notifynewaddress": server.NotifyNewAddress,
+		"sendtransaction":  server.SendTransaction,
 	}
+	server.handler = handler
 	http.HandleFunc("/spvwallet/", server.handle)
 	return server
 }
 
 type Server struct {
 	http.Server
-	methods          map[string]func(Req) Resp
-	NotifyNewAddress func([]byte)
-	SendTransaction  func(core.Transaction) (*common.Uint256, error)
+	methods map[string]func(Req) Resp
+	handler RequestHandler
 }
 
 func (server *Server) Start() {
@@ -65,6 +67,8 @@ func (server *Server) getResp(r *http.Request) Resp {
 	if err != nil {
 		return ReadRequestError
 	}
+
+	log.Debug("Receive request:", string(body))
 
 	var req Req
 	err = json.Unmarshal(body, &req)

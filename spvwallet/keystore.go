@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"sync"
 
-	. "github.com/ioeX/ioeX.SPV/sdk"
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/crypto"
+	. "github.com/ioeXNetwork/ioeX.SPV/sdk"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/crypto"
 )
 
 const (
@@ -23,7 +23,7 @@ type Keystore interface {
 	NewAccount() *Account
 	GetAccounts() []*Account
 	GetAccountByIndex(index int) *Account
-	GetAccountByProgramHash(programHash *common.Uint168) *Account
+	GetAccountByProgramHash(programHash *Uint168) *Account
 
 	Json() (string, error)
 	FromJson(json string, password string) error
@@ -165,7 +165,7 @@ func (store *KeystoreImpl) verifyPassword(password []byte) error {
 	if err != nil {
 		return err
 	}
-	if common.IsEqualBytes(origin, passwordHash[:]) {
+	if IsEqualBytes(origin, passwordHash[:]) {
 		return nil
 	}
 	return errors.New("password wrong")
@@ -179,7 +179,7 @@ func (store *KeystoreImpl) ChangePassword(oldPassword, newPassword []byte) error
 	if err != nil {
 		return err
 	}
-	defer common.ClearBytes(masterKeyEncrypted)
+	defer ClearBytes(masterKeyEncrypted)
 
 	masterKey, err := store.decryptMasterKey(oldPasswordKey)
 	if err != nil {
@@ -257,7 +257,7 @@ func (store *KeystoreImpl) GetAccountByIndex(index int) *Account {
 	return store.accounts[index]
 }
 
-func (store *KeystoreImpl) GetAccountByProgramHash(programHash *common.Uint168) *Account {
+func (store *KeystoreImpl) GetAccountByProgramHash(programHash *Uint168) *Account {
 	if programHash == nil {
 		return nil
 	}

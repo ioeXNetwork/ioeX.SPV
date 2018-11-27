@@ -1,11 +1,11 @@
-package db
+package _interface
 
 import (
 	"database/sql"
-	"fmt"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	"fmt"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type Queue interface {
@@ -16,13 +16,10 @@ type Queue interface {
 	GetAll() ([]*QueueItem, error)
 
 	// Delete confirmed item in queue
-	Delete(notifyId, txHash *common.Uint256) error
+	Delete(txHash *Uint256) error
 
 	// Rollback queue items
 	Rollback(height uint32) error
-
-	// Reset clear all data in database
-	Reset() error
 }
 
 const (
@@ -30,12 +27,10 @@ const (
 	DBName     = "./queue.db"
 
 	CreateQueueDB = `CREATE TABLE IF NOT EXISTS Queue(
-				NotifyId BLOB NOT NULL,
-				TxId BLOB NOT NULL,
-				Height INTEGER NOT NULL);
-				CREATE INDEX IF NOT EXISTS idx_queue_notify_id ON Queue (NotifyId);
-				CREATE INDEX IF NOT EXISTS idx_queue_tx_id ON Queue (TxId);
-				CREATE INDEX IF NOT EXISTS idx_queue_height ON Queue (height);`
+				TxHash BLOB NOT NULL PRIMARY KEY,
+				BlockHash BLOB NOT NULL,
+				Height INTEGER NOT NULL
+			);`
 )
 
 type QueueDB struct {
@@ -62,8 +57,8 @@ func (db *QueueDB) Put(item *QueueItem) error {
 	db.Lock()
 	defer db.Unlock()
 
-	sql := "INSERT OR REPLACE INTO Queue(NotifyId, TxId, Height) VALUES(?,?,?)"
-	_, err := db.Exec(sql, item.NotifyId.Bytes(), item.TxId.Bytes(), item.Height)
+	sql := "INSERT OR REPLACE INTO Queue(TxHash, BlockHash, Height) VALUES(?,?,?)"
+	_, err := db.Exec(sql, item.TxHash.Bytes(), item.BlockHash.Bytes(), item.Height)
 	if err != nil {
 		return err
 	}
@@ -76,30 +71,30 @@ func (db *QueueDB) GetAll() ([]*QueueItem, error) {
 	db.RLock()
 	defer db.RUnlock()
 
-	rows, err := db.Query("SELECT NotifyId, TxId, Height FROM Queue")
+	rows, err := db.Query("SELECT TxHash, BlockHash, Height FROM Queue")
 	if err != nil {
 		return nil, err
 	}
 
 	var items []*QueueItem
 	for rows.Next() {
-		var notifyIdBytes []byte
 		var txHashBytes []byte
+		var blockHashBytes []byte
 		var height uint32
-		err = rows.Scan(&notifyIdBytes, &txHashBytes, &height)
+		err = rows.Scan(&txHashBytes, &blockHashBytes, &height)
 		if err != nil {
 			return nil, err
 		}
 
-		notifyId, err := common.Uint256FromBytes(notifyIdBytes)
+		txHash, err := Uint256FromBytes(txHashBytes)
 		if err != nil {
 			return nil, err
 		}
-		txHash, err := common.Uint256FromBytes(txHashBytes)
+		blockHash, err := Uint256FromBytes(blockHashBytes)
 		if err != nil {
 			return nil, err
 		}
-		item := &QueueItem{NotifyId: *notifyId, TxId: *txHash, Height: height}
+		item := &QueueItem{TxHash: *txHash, BlockHash: *blockHash, Height: height}
 		items = append(items, item)
 	}
 
@@ -107,11 +102,11 @@ func (db *QueueDB) GetAll() ([]*QueueItem, error) {
 }
 
 // Delete confirmed item in queue
-func (db *QueueDB) Delete(notifyId, txHash *common.Uint256) error {
+func (db *QueueDB) Delete(txHash *Uint256) error {
 	db.Lock()
 	defer db.Unlock()
 
-	_, err := db.Exec("DELETE FROM Queue WHERE NotifyId=? AND TxId=?", notifyId.Bytes(), txHash.Bytes())
+	_, err := db.Exec("DELETE FROM Queue WHERE TxHash=?", txHash.Bytes())
 	if err != nil {
 		return err
 	}
@@ -125,13 +120,5 @@ func (db *QueueDB) Rollback(height uint32) error {
 	defer db.Unlock()
 
 	_, err := db.Exec("DELETE FROM Queue WHERE Height=?", height)
-	return err
-}
-
-func (db *QueueDB) Reset() error {
-	db.Lock()
-	defer db.Unlock()
-
-	_, err := db.Exec("DROP TABLE if EXISTS Queue")
 	return err
 }

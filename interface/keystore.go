@@ -1,7 +1,7 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.Utility/crypto"
+	"github.com/ioeXNetwork/ioeX.Utility/crypto"
 )
 
 /*

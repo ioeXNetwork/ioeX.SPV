@@ -1,4 +1,4 @@
-package db
+package _interface
 
 import (
 	"bytes"
@@ -7,26 +7,34 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+
 	"github.com/boltdb/bolt"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"encoding/binary"
+	. "github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type Proofs interface {
 	// Put a merkle proof of the block
-	Put(proof *bloom.MerkleProof) error
+	Put(proof *MerkleProof) error
 
 	// Get a merkle proof of a block
-	Get(height uint32) (*bloom.MerkleProof, error)
+	Get(blockHash *Uint256) (*MerkleProof, error)
 
 	// Get all merkle proofs in database
-	GetAll() ([]*bloom.MerkleProof, error)
+	GetAll() ([]*MerkleProof, error)
 
 	// Delete a merkle proof of a block
-	Delete(height uint32) error
+	Delete(blockHash *Uint256) error
+
+	// Reset database, clear all data
+	Reset() error
+
+	// Close the proofs db
+	Close()
 }
 
-type ProofStore struct {
+type ProofsDB struct {
 	*sync.RWMutex
 	*bolt.DB
 }
@@ -35,7 +43,12 @@ var (
 	BKTProofs = []byte("Proofs")
 )
 
-func NewProofsDB(db *bolt.DB) (*ProofStore, error) {
+func NewProofsDB() (Proofs, error) {
+	db, err := bolt.Open("proofs.bin", 0644, &bolt.Options{InitialMmapSize: 5000000})
+	if err != nil {
+		return nil, err
+	}
+
 	db.Update(func(btx *bolt.Tx) error {
 		_, err := btx.CreateBucketIfNotExists(BKTProofs)
 		if err != nil {
@@ -44,11 +57,11 @@ func NewProofsDB(db *bolt.DB) (*ProofStore, error) {
 		return nil
 	})
 
-	return &ProofStore{RWMutex: new(sync.RWMutex), DB: db}, nil
+	return &ProofsDB{RWMutex: new(sync.RWMutex), DB: db}, nil
 }
 
 // Put a merkle proof of the block
-func (db *ProofStore) Put(proof *bloom.MerkleProof) error {
+func (db *ProofsDB) Put(proof *MerkleProof) error {
 	db.Lock()
 	defer db.Unlock()
 
@@ -59,10 +72,7 @@ func (db *ProofStore) Put(proof *bloom.MerkleProof) error {
 			return err
 		}
 
-		var key = make([]byte, 4)
-		binary.LittleEndian.PutUint32(key[:], proof.Height)
-
-		err = tx.Bucket(BKTProofs).Put(key, bytes)
+		err = tx.Bucket(BKTProofs).Put(proof.BlockHash.Bytes(), bytes)
 		if err != nil {
 			return err
 		}
@@ -72,16 +82,13 @@ func (db *ProofStore) Put(proof *bloom.MerkleProof) error {
 }
 
 // Get a merkle proof of a block
-func (db *ProofStore) Get(height uint32) (proof *bloom.MerkleProof, err error) {
+func (db *ProofsDB) Get(blockHash *Uint256) (proof *MerkleProof, err error) {
 	db.RLock()
 	defer db.RUnlock()
 
 	err = db.View(func(tx *bolt.Tx) error {
 
-		var key = make([]byte, 4)
-		binary.LittleEndian.PutUint32(key[:], height)
-
-		proof, err = getProof(tx, key)
+		proof, err = getProof(tx, blockHash.Bytes())
 		if err != nil {
 			return err
 		}
@@ -97,7 +104,7 @@ func (db *ProofStore) Get(height uint32) (proof *bloom.MerkleProof, err error) {
 }
 
 // Get all merkle proofs in database
-func (db *ProofStore) GetAll() (proofs []*bloom.MerkleProof, err error) {
+func (db *ProofsDB) GetAll() (proofs []*MerkleProof, err error) {
 	db.RLock()
 	defer db.RUnlock()
 
@@ -126,19 +133,32 @@ func (db *ProofStore) GetAll() (proofs []*bloom.MerkleProof, err error) {
 }
 
 // Delete a merkle proof of a block
-func (db *ProofStore) Delete(height uint32) error {
+func (db *ProofsDB) Delete(blockHash *Uint256) error {
 	db.Lock()
 	defer db.Unlock()
 
 	return db.Update(func(tx *bolt.Tx) error {
-		var key = make([]byte, 4)
-		binary.LittleEndian.PutUint32(key[:], height)
-
-		return tx.Bucket(BKTProofs).Delete(key)
+		return tx.Bucket(BKTProofs).Delete(blockHash.Bytes())
 	})
 }
 
-func getProof(tx *bolt.Tx, key []byte) (*bloom.MerkleProof, error) {
+func (db *ProofsDB) Reset() error {
+	db.Lock()
+	defer db.Unlock()
+
+	return db.Update(func(tx *bolt.Tx) error {
+		return tx.DeleteBucket(BKTProofs)
+	})
+}
+
+// Close db
+func (db *ProofsDB) Close() {
+	db.Lock()
+	db.DB.Close()
+	log.Debug("Proofs DB closed")
+}
+
+func getProof(tx *bolt.Tx, key []byte) (*MerkleProof, error) {
 	proofBytes := tx.Bucket(BKTProofs).Get(key)
 	if proofBytes == nil {
 		return nil, errors.New(fmt.Sprintf("MerkleProof %s does not exist in database", hex.EncodeToString(key)))
@@ -147,7 +167,7 @@ func getProof(tx *bolt.Tx, key []byte) (*bloom.MerkleProof, error) {
 	return deserializeProof(proofBytes)
 }
 
-func serializeProof(proof *bloom.MerkleProof) ([]byte, error) {
+func serializeProof(proof *MerkleProof) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	err := proof.Serialize(buf)
 	if err != nil {
@@ -156,8 +176,8 @@ func serializeProof(proof *bloom.MerkleProof) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func deserializeProof(body []byte) (*bloom.MerkleProof, error) {
-	var proof bloom.MerkleProof
+func deserializeProof(body []byte) (*MerkleProof, error) {
+	var proof MerkleProof
 	err := proof.Deserialize(bytes.NewReader(body))
 	if err != nil {
 		return nil, err

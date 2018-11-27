@@ -1,103 +1,83 @@
 package _interface
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 
-	"github.com/ioeX/ioeX.SPV/interface/db"
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/sdk"
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/sdk"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type SPVServiceImpl struct {
-	sdk.SPVService
-	headers   *db.HeaderStore
-	dataStore db.DataStore
-	queue     db.Queue
-	listeners map[common.Uint256]TransactionListener
+	*spvwallet.SPVWallet
+	clientId   uint64
+	seeds      []string
+	accounts   []*Uint168
+	proofs     Proofs
+	queue      Queue
+	addrFilter *sdk.AddrFilter
+	listeners  map[TransactionType][]TransactionListener
 }
 
-func NewSPVServiceImpl(magic uint32, foundation string, clientId uint64, seeds []string, minOutbound, maxConnections int) (*SPVServiceImpl, error) {
-	var err error
-	service := new(SPVServiceImpl)
-	service.headers, err = db.NewHeaderStore()
-	if err != nil {
-		return nil, err
+func newSPVServiceImpl(clientId uint64, seeds []string) *SPVServiceImpl {
+	return &SPVServiceImpl{
+		clientId:  clientId,
+		seeds:     seeds,
+		listeners: make(map[TransactionType][]TransactionListener),
 	}
-
-	service.dataStore, err = db.NewDataStore()
-	if err != nil {
-		return nil, err
-	}
-
-	service.queue, err = db.NewQueueDB()
-	if err != nil {
-		return nil, err
-	}
-
-	spvClient, err := sdk.GetSPVClient(magic, clientId, seeds, minOutbound, maxConnections)
-	if err != nil {
-		return nil, err
-	}
-
-	service.SPVService, err = sdk.GetSPVService(spvClient, foundation, service.headers, service)
-	if err != nil {
-		return nil, err
-	}
-
-	service.listeners = make(map[common.Uint256]TransactionListener)
-
-	return service, nil
 }
 
-func (service *SPVServiceImpl) RegisterTransactionListener(listener TransactionListener) error {
-	address, err := common.Uint168FromAddress(listener.Address())
+func (service *SPVServiceImpl) RegisterAccount(address string) error {
+	account, err := Uint168FromAddress(address)
 	if err != nil {
-		return fmt.Errorf("address %s is not a valied address", listener.Address())
+		return errors.New("Invalid address format")
 	}
-	key := getListenerKey(listener)
-	if _, ok := service.listeners[key]; ok {
-		return fmt.Errorf("listener with address: %s type: %s flags: %d already registered",
-			listener.Address(), listener.Type().Name(), listener.Flags())
-	}
-	service.listeners[key] = listener
-	return service.dataStore.Addrs().Put(address)
+	service.accounts = append(service.accounts, account)
+	return nil
 }
 
-func (service *SPVServiceImpl) SubmitTransactionReceipt(notifyId, txHash common.Uint256) error {
-	return service.queue.Delete(&notifyId, &txHash)
+func (service *SPVServiceImpl) RegisterTransactionListener(listener TransactionListener) {
+	listeners := service.listeners[listener.Type()]
+	listeners = append(listeners, listener)
+	service.listeners[listener.Type()] = listeners
+	log.Debug("Listener registered:", listeners)
 }
 
-func (service *SPVServiceImpl) VerifyTransaction(proof bloom.MerkleProof, tx core.Transaction) error {
+func (service *SPVServiceImpl) SubmitTransactionReceipt(txHash Uint256) error {
+	return service.queue.Delete(&txHash)
+}
+
+func (service *SPVServiceImpl) VerifyTransaction(proof bloom.MerkleProof, tx Transaction) error {
+	if service.SPVWallet == nil {
+		return errors.New("SPV service not started")
+	}
+
 	// Get Header from main chain
-	header, err := service.headers.GetHeader(&proof.BlockHash)
+	header, err := service.Headers().GetHeader(proof.BlockHash)
 	if err != nil {
 		return errors.New("can not get block from main chain")
 	}
 
 	// Check if merkleroot is match
-	merkleBlock := msg.MerkleBlock{
-		Header:       &header.Header,
+	merkleBlock := bloom.MerkleBlock{
+		Header:       header.Header,
 		Transactions: proof.Transactions,
 		Hashes:       proof.Hashes,
 		Flags:        proof.Flags,
 	}
 	txIds, err := bloom.CheckMerkleBlock(merkleBlock)
 	if err != nil {
-		return fmt.Errorf("check merkle branch failed, %s", err.Error())
+		return errors.New("check merkle branch failed, " + err.Error())
 	}
 	if len(txIds) == 0 {
-		return fmt.Errorf("invalid transaction proof, no transactions found")
+		return errors.New("invalid transaction proof, no transactions found")
 	}
 
 	// Check if transaction hash is match
@@ -109,118 +89,56 @@ func (service *SPVServiceImpl) VerifyTransaction(proof bloom.MerkleProof, tx cor
 		}
 	}
 	if !match {
-		return fmt.Errorf("transaction hash not match proof")
+		return errors.New("transaction hash not match proof")
 	}
 
 	return nil
 }
 
-func (service *SPVServiceImpl) SendTransaction(tx core.Transaction) error {
-	_, err := service.SPVService.SendTransaction(tx)
-	return err
-}
-
-func (service *SPVServiceImpl) HeaderStore() store.HeaderStore {
-	return service.headers
-}
-
-func (service *SPVServiceImpl) GetData() ([]*common.Uint168, []*core.OutPoint) {
-	ops, err := service.dataStore.Outpoints().GetAll()
-	if err != nil {
-		log.Error("[SPV_SERVICE] GetData error ", err)
+func (service *SPVServiceImpl) SendTransaction(tx Transaction) error {
+	if service.SPVWallet == nil {
+		return errors.New("SPV service not started")
 	}
 
-	return service.dataStore.Addrs().GetAll(), ops
-}
-
-func (service *SPVServiceImpl) CommitTx(tx *core.Transaction, height uint32) (bool, error) {
-	hits := make(map[common.Uint168]struct{})
-	for index, output := range tx.Outputs {
-		if service.dataStore.Addrs().GetFilter().ContainAddr(output.ProgramHash) {
-			outpoint := core.NewOutPoint(tx.Hash(), uint16(index))
-			if err := service.dataStore.Outpoints().Put(outpoint, output.ProgramHash); err != nil {
-				return false, err
-			}
-			hits[output.ProgramHash] = struct{}{}
-		}
-	}
-
-	for _, input := range tx.Inputs {
-		if addr := service.dataStore.Outpoints().IsExist(&input.Previous); addr != nil {
-			hits[*addr] = struct{}{}
-		}
-	}
-
-	if len(hits) == 0 {
-		return true, nil
-	}
-
-	for _, listener := range service.listeners {
-		hash, _ := common.Uint168FromAddress(listener.Address())
-		if _, ok := hits[*hash]; ok {
-			service.queueMessageByListener(listener, tx, height)
-		}
-	}
-
-	return false, service.dataStore.Txs().Put(db.NewStoreTx(tx, height))
-}
-
-func (service *SPVServiceImpl) OnBlockCommitted(block *msg.MerkleBlock, txs []*core.Transaction) {
-	header := block.Header.(*core.Header)
-
-	// Store merkle proof
-	proof := bloom.MerkleProof{
-		BlockHash:    header.Hash(),
-		Height:       header.Height,
-		Transactions: block.Transactions,
-		Hashes:       block.Hashes,
-		Flags:        block.Flags,
-	}
-
-	if err := service.dataStore.Proofs().Put(&proof); err != nil {
-		log.Errorf("[SPV_SERVICE] store merkle proof failed, error %s", err.Error())
-		return
-	}
-
-	// Look up for queued transactions
-	items, err := service.queue.GetAll()
-	if err != nil {
-		return
-	}
-	for _, item := range items {
-		//	Get proof from db
-		proof, err := service.dataStore.Proofs().Get(item.Height)
-		if err != nil {
-			log.Errorf("query merkle proof at height %d failed, %s", item.Height, err.Error())
-			continue
-		}
-		//	Get transaction from db
-		storeTx, err := service.dataStore.Txs().Get(&item.TxId)
-		if err != nil {
-			log.Errorf("query transaction failed, txId %s", item.TxId.String())
-			continue
-		}
-
-		// Notify listeners
-		service.notifyTransaction(item.NotifyId, *proof, storeTx.Transaction, header.Height-item.Height)
-	}
-}
-
-// Overwrite OnRollback() method in SPVWallet
-func (service *SPVServiceImpl) OnRollback(height uint32) error {
-	err := service.dataStore.Rollback(height)
-	if err != nil {
-		log.Warnf("Rollback data store error %s", err.Error())
-	}
-	err = service.queue.Rollback(height)
-	if err != nil {
-		log.Warnf("Rollback transaction notify queue error %s", err.Error())
-	}
-	service.notifyRollback(height)
-	return nil
+	return service.SPVWallet.SendTransaction(tx)
 }
 
 func (service *SPVServiceImpl) Start() error {
+	if service.SPVWallet != nil {
+		return errors.New("SPV service already started")
+	}
+
+	var err error
+	service.SPVWallet, err = spvwallet.Init(service.clientId, service.seeds)
+	if err != nil {
+		return err
+	}
+
+	// Initialize proofs db
+	service.proofs, err = NewProofsDB()
+	if err != nil {
+		return err
+	}
+
+	service.queue, err = NewQueueDB()
+	if err != nil {
+		return err
+	}
+
+	// Register accounts
+	if len(service.accounts) == 0 {
+		return errors.New("No account registered")
+	}
+	for _, account := range service.accounts {
+		service.DataStore().Addrs().Put(account, RegisteredAccountScript, db.TypeNotify)
+	}
+
+	// Create address filter by accounts
+	service.addrFilter = sdk.NewAddrFilter(service.accounts)
+
+	// Set callback
+	service.SPVWallet.Blockchain().AddStateListener(service)
+
 	// Handle interrupt signal
 	stop := make(chan int, 1)
 	signals := make(chan os.Signal, 1)
@@ -234,102 +152,113 @@ func (service *SPVServiceImpl) Start() error {
 	}()
 
 	// Start SPV service
-	service.SPVService.Start()
+	service.SPVWallet.Start()
 
 	<-stop
 
 	return nil
 }
 
-func (service *SPVServiceImpl) ResetStores() error {
-	err := service.headers.Reset()
-	if err != nil {
-		log.Warnf("Reset header store error %s", err.Error())
-	}
-	err = service.dataStore.Reset()
-	if err != nil {
-		log.Warnf("Reset data store error %s", err.Error())
-	}
-	err = service.queue.Reset()
-	if err != nil {
-		log.Warnf("Reset transaction notify queue store error %s", err.Error())
-	}
-	return nil
+func (service *SPVServiceImpl) OnTxCommitted(tx Transaction, height uint32) {}
+
+func (service *SPVServiceImpl) OnChainRollback(height uint32) {
+	service.queue.Rollback(height)
+	service.notifyRollback(height)
 }
 
-func (service *SPVServiceImpl) queueMessageByListener(
-	listener TransactionListener, tx *core.Transaction, height uint32) {
-	// skip unpacked transaction
-	if height == 0 {
-		return
-	}
+func (service *SPVServiceImpl) OnBlockCommitted(block bloom.MerkleBlock, txs []Transaction) {
+	header := block.Header
 
-	// skip transactions that not match the require type
-	if listener.Type() != tx.TxType {
-		return
-	}
-
-	// queue message
-	service.queue.Put(&db.QueueItem{
-		NotifyId: getListenerKey(listener),
-		TxId:     tx.Hash(),
-		Height:   height,
+	// Store merkle proof
+	service.proofs.Put(&bloom.MerkleProof{
+		BlockHash:    header.Hash(),
+		Height:       header.Height,
+		Transactions: block.Transactions,
+		Hashes:       block.Hashes,
+		Flags:        block.Flags,
 	})
-}
 
-func (service *SPVServiceImpl) notifyTransaction(
-	notifyId common.Uint256, proof bloom.MerkleProof, tx core.Transaction, confirmations uint32) {
-
-	listener, ok := service.listeners[notifyId]
-	if !ok {
+	// If no transactions return
+	if len(txs) == 0 {
 		return
 	}
 
-	// Get transaction id
-	txId := tx.Hash()
+	// Find transactions matches registered accounts
+	var matchedTxs []Transaction
+	for _, tx := range txs {
+		for _, output := range tx.Outputs {
+			if service.addrFilter.ContainAddr(output.ProgramHash) {
+				matchedTxs = append(matchedTxs, tx)
+			}
+		}
+	}
 
-	// Remove notifications if FlagNotifyInSyncing not set
-	if service.SPVService.ChainState() == sdk.SYNCING &&
-		listener.Flags()&FlagNotifyInSyncing != FlagNotifyInSyncing {
+	// Queue matched transactions
+	for _, tx := range matchedTxs {
+		item := &QueueItem{
+			TxHash:    tx.Hash(),
+			BlockHash: header.Hash(),
+			Height:    header.Height,
+		}
 
-		if listener.Flags()&FlagNotifyConfirmed == FlagNotifyConfirmed {
+		// Save to queue db
+		service.queue.Put(item)
+	}
+
+	// Look up for queued transactions
+	items, err := service.queue.GetAll()
+	if err != nil {
+		return
+	}
+	for _, item := range items {
+		//	Get proof from db
+		proof, err := service.proofs.Get(&item.BlockHash)
+		if err != nil {
+			log.Error("Query merkle proof failed, block hash:", item.BlockHash.String())
+			return
+		}
+		//	Get transaction from db
+		storeTx, err := service.DataStore().Txs().Get(&item.TxHash)
+		if err != nil {
+			log.Error("Query transaction failed, tx hash:", item.TxHash.String())
+			return
+		}
+		// Prune the proof by the given transaction id
+		proof = getTransactionProof(proof, storeTx.TxId)
+
+		// Notify listeners
+		service.notifyTransaction(*proof, storeTx.Data, header.Height-item.Height)
+	}
+}
+
+func (service *SPVServiceImpl) notifyTransaction(proof bloom.MerkleProof, tx Transaction, confirmations uint32) {
+	listeners := service.listeners[tx.TxType]
+	for _, listener := range listeners {
+		if listener.Confirmed() {
 			if confirmations >= getConfirmations(tx) {
-				service.queue.Delete(&notifyId, &txId)
+				go listener.Notify(proof, tx)
 			}
 		} else {
-			service.queue.Delete(&notifyId, &txId)
+			go listener.Notify(proof, tx)
 		}
-		return
-	}
-
-	// Notify listener
-	if listener.Flags()&FlagNotifyConfirmed == FlagNotifyConfirmed {
-		if confirmations >= getConfirmations(tx) {
-			go listener.Notify(notifyId, proof, tx)
-		}
-	} else {
-		go listener.Notify(notifyId, proof, tx)
 	}
 }
 
 func (service *SPVServiceImpl) notifyRollback(height uint32) {
-	for _, listener := range service.listeners {
-		go listener.Rollback(height)
+	for _, group := range service.listeners {
+		for _, listener := range group {
+			go listener.Rollback(height)
+		}
 	}
 }
 
-func getListenerKey(listener TransactionListener) common.Uint256 {
-	buf := new(bytes.Buffer)
-	addr, _ := common.Uint168FromAddress(listener.Address())
-	common.WriteElements(buf, addr[:], listener.Type(), listener.Flags())
-	return sha256.Sum256(buf.Bytes())
-}
-
-func getConfirmations(tx core.Transaction) uint32 {
+func getConfirmations(tx Transaction) uint32 {
 	// TODO user can set confirmations attribute in transaction,
 	// if the confirmation attribute is set, use it instead of default value
-	if tx.TxType == core.CoinBase {
-		return 100
-	}
 	return DefaultConfirmations
+}
+
+func getTransactionProof(proof *bloom.MerkleProof, txHash Uint256) *bloom.MerkleProof {
+	// TODO Pick out the merkle proof of the transaction
+	return proof
 }

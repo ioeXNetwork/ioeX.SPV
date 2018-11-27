@@ -6,15 +6,15 @@ import (
 	"math"
 	"sync"
 
-	"github.com/ioeX/ioeX.MainChain/core"
-	"github.com/ioeX/ioeX.Utility/common"
-	"time"
+	"github.com/ioeXNetwork/ioeX.SPV/db"
+
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const CreateTXNDB = `CREATE TABLE IF NOT EXISTS TXNs(
 				Hash BLOB NOT NULL PRIMARY KEY,
 				Height INTEGER NOT NULL,
-				Timestamp INTEGER NOT NULL,
 				RawData BLOB NOT NULL
 			);`
 
@@ -23,7 +23,7 @@ type TxsDB struct {
 	*sql.DB
 }
 
-func NewTxsDB(db *sql.DB, lock *sync.RWMutex) (*TxsDB, error) {
+func NewTxsDB(db *sql.DB, lock *sync.RWMutex) (Txs, error) {
 	_, err := db.Exec(CreateTXNDB)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func NewTxsDB(db *sql.DB, lock *sync.RWMutex) (*TxsDB, error) {
 }
 
 // Put a new transaction to database
-func (t *TxsDB) Put(storeTx *Tx) error {
+func (t *TxsDB) Put(storeTx *db.StoreTx) error {
 	t.Lock()
 	defer t.Unlock()
 
@@ -42,8 +42,8 @@ func (t *TxsDB) Put(storeTx *Tx) error {
 		return err
 	}
 
-	sql := `INSERT OR REPLACE INTO TXNs(Hash, Height, Timestamp, RawData) VALUES(?,?,?,?)`
-	_, err = t.Exec(sql, storeTx.TxId.Bytes(), storeTx.Height, storeTx.Timestamp.Unix(), buf.Bytes())
+	sql := `INSERT OR REPLACE INTO TXNs(Hash, Height, RawData) VALUES(?,?,?)`
+	_, err = t.Exec(sql, storeTx.TxId.Bytes(), storeTx.Height, buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -52,42 +52,41 @@ func (t *TxsDB) Put(storeTx *Tx) error {
 }
 
 // Fetch a raw tx and it's metadata given a hash
-func (t *TxsDB) Get(txId *common.Uint256) (*Tx, error) {
+func (t *TxsDB) Get(txId *Uint256) (*db.StoreTx, error) {
 	t.RLock()
 	defer t.RUnlock()
 
-	row := t.QueryRow(`SELECT Height, Timestamp, RawData FROM TXNs WHERE Hash=?`, txId.Bytes())
+	row := t.QueryRow(`SELECT Height, RawData FROM TXNs WHERE Hash=?`, txId.Bytes())
 	var height uint32
-	var timestamp int64
 	var rawData []byte
-	err := row.Scan(&height, &timestamp, &rawData)
+	err := row.Scan(&height, &rawData)
 	if err != nil {
 		return nil, err
 	}
-	var tx core.Transaction
+	var tx Transaction
 	err = tx.DeserializeUnsigned(bytes.NewReader(rawData))
 	if err != nil {
 		return nil, err
 	}
 
-	return &Tx{TxId: *txId, Height: height, Timestamp: time.Unix(timestamp, 0), Data: tx}, nil
+	return &db.StoreTx{TxId: *txId, Height: height, Data: tx}, nil
 }
 
 // Fetch all transactions from database
-func (t *TxsDB) GetAll() ([]*Tx, error) {
+func (t *TxsDB) GetAll() ([]*db.StoreTx, error) {
 	return t.GetAllFrom(math.MaxUint32)
 }
 
 // Fetch all transactions from the given height
-func (t *TxsDB) GetAllFrom(height uint32) ([]*Tx, error) {
+func (t *TxsDB) GetAllFrom(height uint32) ([]*db.StoreTx, error) {
 	t.RLock()
 	defer t.RUnlock()
 
-	sql := "SELECT Hash, Height, Timestamp, RawData FROM TXNs"
+	sql := "SELECT Hash, Height, RawData FROM TXNs"
 	if height != math.MaxUint32 {
 		sql += " WHERE Height=?"
 	}
-	var txns []*Tx
+	var txns []*db.StoreTx
 	rows, err := t.Query(sql, height)
 	if err != nil {
 		return txns, err
@@ -97,32 +96,44 @@ func (t *TxsDB) GetAllFrom(height uint32) ([]*Tx, error) {
 	for rows.Next() {
 		var txIdBytes []byte
 		var height uint32
-		var timestamp int64
 		var rawData []byte
-		err := rows.Scan(&txIdBytes, &height, &timestamp, &rawData)
+		err := rows.Scan(&txIdBytes, &height, &rawData)
 		if err != nil {
 			return txns, err
 		}
 
-		txId, err := common.Uint256FromBytes(txIdBytes)
+		txId, err := Uint256FromBytes(txIdBytes)
 		if err != nil {
 			return txns, err
 		}
 
-		var tx core.Transaction
+		var tx Transaction
 		err = tx.DeserializeUnsigned(bytes.NewReader(rawData))
 		if err != nil {
 			return nil, err
 		}
 
-		txns = append(txns, &Tx{TxId: *txId, Height: height, Timestamp: time.Unix(timestamp, 0), Data: tx})
+		txns = append(txns, &db.StoreTx{TxId: *txId, Height: height, Data: tx})
 	}
 
 	return txns, nil
 }
 
+// Update the height of a transaction
+func (t *TxsDB) UpdateHeight(txId *Uint256, height uint32) error {
+	t.Lock()
+	defer t.Unlock()
+
+	_, err := t.Exec("UPDATE TXNs SET Height=? WHERE Hash=?", height, txId.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Delete a transaction from the db
-func (t *TxsDB) Delete(txId *common.Uint256) error {
+func (t *TxsDB) Delete(txId *Uint256) error {
 	t.Lock()
 	defer t.Unlock()
 

@@ -1,12 +1,12 @@
 package sdk
 
 import (
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/crypto"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/crypto"
 )
 
 /*
-A IOEX standard account is a set of private key, public key, redeem script, program hash and address data.
+A ELA standard account is a set of private key, public key, redeem script, program hash and address data.
 redeem script is (script content length)+(script content)+(script type),
 program hash is the sha256 value of redeem script and converted to ripemd160 format with a (Type) prefix.
 address is the base58 format of program hash, which is the string value show up on user interface as account address.
@@ -16,7 +16,7 @@ type Account struct {
 	privateKey   []byte
 	publicKey    *crypto.PublicKey
 	redeemScript []byte
-	programHash  *common.Uint168
+	programHash  *Uint168
 	address      string
 }
 
@@ -62,7 +62,7 @@ func (a *Account) RedeemScript() []byte {
 }
 
 // Get account program hash
-func (a *Account) ProgramHash() *common.Uint168 {
+func (a *Account) ProgramHash() *Uint168 {
 	return a.programHash
 }
 

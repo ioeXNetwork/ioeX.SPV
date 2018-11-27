@@ -1,9 +1,13 @@
 package sdk
 
 import (
-	"github.com/ioeX/ioeX.SPV/net"
+	"errors"
 
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
+
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
 /*
@@ -43,26 +47,32 @@ type SPVMessageHandler interface {
 	// you've added into the bloom filter before you send a filterload message with this bloom filter.
 	// You will use these transaction hashes to request transactions by sending data request message
 	// with invType TRANSACTION
-	OnMerkleBlock(*net.Peer, *msg.MerkleBlock) error
+	OnMerkleBlock(*net.Peer, *bloom.MerkleBlock) error
 
 	// After sent a data request with invType TRANSACTION, a txn message will return through this method.
 	// these transactions are matched to the bloom filter you have sent with the filterload message.
-	OnTx(*net.Peer, *msg.Tx) error
+	OnTxn(*net.Peer, *core.Transaction) error
 
 	// If the BLOCK or TRANSACTION requested by the data request message can not be found,
 	// notfound message with requested data hash will return through this method.
 	OnNotFound(*net.Peer, *msg.NotFound) error
-
-	// If the submitted transaction was rejected, this message will return.
-	OnReject(*net.Peer, *msg.Reject) error
 }
 
 /*
-Get the SPV client by set the network magic, passing the clientId and seeds arguments.
+Get the SPV client by specify the netType, passing the clientId and seeds arguments.
 netType are TypeMainNet and TypeTestNet two options, clientId is the unique id to identify
 this client in the peer to peer network. seeds is a list of other peers IP:[Port] addresses,
 port is not necessary for it will be overwrite to SPVServerPort according to the SPV protocol
 */
-func GetSPVClient(magic uint32, clientId uint64, seeds []string, minOutbound, maxConnections int) (SPVClient, error) {
-	return NewSPVClientImpl(magic, clientId, seeds, minOutbound, maxConnections)
+func GetSPVClient(netType string, clientId uint64, seeds []string) (SPVClient, error) {
+	var magic uint32
+	switch netType {
+	case TypeMainNet:
+		magic = MainNetMagic
+	case TypeTestNet:
+		magic = TestNetMagic
+	default:
+		return nil, errors.New("Unknown net type ")
+	}
+	return NewSPVClientImpl(magic, clientId, seeds)
 }

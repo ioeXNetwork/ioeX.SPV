@@ -1,11 +1,11 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/elastos/Elastos.ELA.SPV/sdk"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 /*
@@ -14,66 +14,57 @@ service implementation running background, you can register specific accounts th
 interested in and receive transaction notifications of these accounts.
 */
 type SPVService interface {
-	// RegisterTransactionListener register the listener to receive transaction notifications
-	// listeners must be registered before call Start() method, or some notifications will go missing.
-	RegisterTransactionListener(TransactionListener) error
+	// Register the account address that you are interested in
+	RegisterAccount(address string) error
+
+	// Register the TransactionListener to receive transaction notifications
+	// when a transaction related with the registered accounts is received
+	RegisterTransactionListener(TransactionListener)
 
 	// After receive the transaction callback, call this method
-	// to confirm that the transaction with the given ID was handled,
-	// so the transaction will be removed from the notify queue.
-	// the notifyId is the key to specify which listener received this notify.
-	SubmitTransactionReceipt(notifyId common.Uint256, txId common.Uint256) error
+	// to confirm that the transaction with the given ID was handled
+	// so the transaction will be removed from the notify queue
+	SubmitTransactionReceipt(txId Uint256) error
 
 	// To verify if a transaction is valid
 	// This method is useful when receive a transaction from other peer
-	VerifyTransaction(bloom.MerkleProof, core.Transaction) error
+	VerifyTransaction(bloom.MerkleProof, Transaction) error
 
 	// Send a transaction to the P2P network
-	SendTransaction(core.Transaction) error
+	SendTransaction(Transaction) error
 
-	// Get headers database
-	HeaderStore() store.HeaderStore
+	// Get the Blockchain instance.
+	// Blockchain will handle block and transaction commits,
+	// verify and store the block and transactions.
+	// If you want to add extra logic when new block or transaction comes,
+	// use Blockchain.AddStateListener() to register chain state callbacks
+	Blockchain() *sdk.Blockchain
 
 	// Start the SPV service
 	Start() error
-
-	// ResetStores clear all data stores data including HeaderStore, ProofStore, AddrsStore, TxsStore etc.
-	ResetStores() error
 }
-
-const (
-	// FlagNotifyConfirmed indicates if this transaction should be callback after reach the confirmed height,
-	// by default 6 confirmations are needed according to the protocol
-	FlagNotifyConfirmed = 1 << 0
-
-	// FlagNotifyInSyncing indicates if notify this listener when SPV is in syncing.
-	FlagNotifyInSyncing = 1 << 1
-)
 
 /*
 Register this listener into the SPVService RegisterTransactionListener() method
 to receive transaction notifications.
 */
 type TransactionListener interface {
-	// The address this listener interested
-	Address() string
-
 	// Type() indicates which transaction type this listener are interested
-	Type() core.TransactionType
+	Type() TransactionType
 
-	// Flags control the notification actions by the given flag
-	Flags() uint64
+	// Confirmed() indicates if this transaction should be callback after reach the confirmed height,
+	// by default 6 confirmations are needed according to the protocol
+	Confirmed() bool
 
 	// Notify() is the method to callback the received transaction
-	// with the merkle tree proof to verify it, the notifyId is key of this
-	// notify message and it must be submitted with the receipt together.
-	Notify(notifyId common.Uint256, proof bloom.MerkleProof, tx core.Transaction)
+	// with the merkle tree proof to verify it
+	Notify(bloom.MerkleProof, Transaction)
 
 	// Rollback callbacks that, the transactions
 	// on the given height has been rollback
 	Rollback(height uint32)
 }
 
-func NewSPVService(magic uint32, foundation string, clientId uint64, seeds []string, minOutbound, maxConnections int) (SPVService, error) {
-	return NewSPVServiceImpl(magic, foundation, clientId, seeds, minOutbound, maxConnections)
+func NewSPVService(clientId uint64, seeds []string) SPVService {
+	return newSPVServiceImpl(clientId, seeds)
 }

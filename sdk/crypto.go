@@ -5,7 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 
-	. "github.com/ioeX/ioeX.Utility/crypto"
+	. "github.com/ioeXNetwork/ioeX.Utility/crypto"
 )
 
 // Generate a ECC private key by the given curve
@@ -21,7 +21,7 @@ func GetPublicKey(curve elliptic.Curve, privateKey []byte) *PublicKey {
 	return publicKey
 }
 
-// Get a standard IOEX account by the given private key and ECC curve
+// Get a standard ELA account by the given private key and ECC curve
 func GetAccount(curve elliptic.Curve, privateKey []byte) *Account {
 	account, _ := NewAccount(privateKey, GetPublicKey(curve, privateKey))
 	return account
@@ -37,7 +37,7 @@ func GetP256PublicKey(privateKey []byte) *PublicKey {
 	return GetPublicKey(elliptic.P256(), privateKey)
 }
 
-// Get a standard IOEX account by the given private key on ECC P256 curve
+// Get a standard ELA account by the given private key on ECC P256 curve
 func GetP256Account(privateKey []byte) *Account {
 	return GetAccount(elliptic.P256(), privateKey)
 }

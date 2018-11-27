@@ -4,28 +4,28 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
 
-	"github.com/ioeX/ioeX.Utility/p2p"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
 type SPVClientImpl struct {
-	p2pClient  P2PClient
+	p2p        P2PClient
 	msgHandler SPVMessageHandler
 }
 
-func NewSPVClientImpl(magic uint32, clientId uint64, seeds []string, minOutbound, maxConnections int) (*SPVClientImpl, error) {
+func NewSPVClientImpl(magic uint32, clientId uint64, seeds []string) (*SPVClientImpl, error) {
 	// Initialize P2P client
-	p2pClient, err := GetP2PClient(magic, MaxMsgSize, clientId, seeds, 0, minOutbound, maxConnections)
+	p2p, err := GetP2PClient(magic, clientId, seeds)
 	if err != nil {
 		return nil, err
 	}
 
-	client := &SPVClientImpl{p2pClient: p2pClient}
-	p2pClient.PeerManager().SetMessageHandler(client)
+	client := &SPVClientImpl{p2p: p2p}
+	p2p.SetMessageHandler(client)
 
 	return client, nil
 }
@@ -35,42 +35,27 @@ func (client *SPVClientImpl) SetMessageHandler(handler SPVMessageHandler) {
 }
 
 func (client *SPVClientImpl) Start() {
-	client.p2pClient.Start()
+	client.p2p.Start()
 }
 
 func (client *SPVClientImpl) PeerManager() *net.PeerManager {
-	return client.p2pClient.PeerManager()
-}
-
-// Filter peer handshake according to the SPV protocol
-func (client *SPVClientImpl) OnHandshake(v *msg.Version) error {
-	//if v.Version < ProtocolVersion {
-	//	return fmt.Errorf("To support SPV protocol, peer version must greater than ", ProtocolVersion)
-	//}
-
-	if v.Services/OpenService&1 == 0 {
-		return errors.New("SPV service not enabled on connected peer")
-	}
-
-	return nil
+	return client.p2p.PeerManager()
 }
 
 func (client *SPVClientImpl) MakeMessage(cmd string) (message p2p.Message, err error) {
 	switch cmd {
-	case p2p.CmdPing:
+	case "ping":
 		message = new(msg.Ping)
-	case p2p.CmdPong:
+	case "pong":
 		message = new(msg.Pong)
-	case p2p.CmdInv:
+	case "inv":
 		message = new(msg.Inventory)
-	case p2p.CmdTx:
-		message = msg.NewTx(new(core.Transaction))
-	case p2p.CmdMerkleBlock:
-		message = msg.NewMerkleBlock(new(core.Header))
-	case p2p.CmdNotFound:
+	case "tx":
+		message = new(core.Transaction)
+	case "merkleblock":
+		message = new(bloom.MerkleBlock)
+	case "notfound":
 		message = new(msg.NotFound)
-	case p2p.CmdReject:
-		message = new(msg.Reject)
 	default:
 		return nil, errors.New("Received unsupported message, CMD " + cmd)
 	}
@@ -78,65 +63,59 @@ func (client *SPVClientImpl) MakeMessage(cmd string) (message p2p.Message, err e
 }
 
 func (client *SPVClientImpl) HandleMessage(peer *net.Peer, message p2p.Message) error {
-	switch message := message.(type) {
+	switch msg := message.(type) {
 	case *msg.Ping:
-		return client.OnPing(peer, message)
+		return client.OnPing(peer, msg)
 	case *msg.Pong:
-		return client.OnPong(peer, message)
+		return client.OnPong(peer, msg)
 	case *msg.Inventory:
-		return client.msgHandler.OnInventory(peer, message)
-	case *msg.MerkleBlock:
-		return client.msgHandler.OnMerkleBlock(peer, message)
-	case *msg.Tx:
-		return client.msgHandler.OnTx(peer, message)
+		return client.msgHandler.OnInventory(peer, msg)
+	case *bloom.MerkleBlock:
+		return client.msgHandler.OnMerkleBlock(peer, msg)
+	case *core.Transaction:
+		return client.msgHandler.OnTxn(peer, msg)
 	case *msg.NotFound:
-		return client.msgHandler.OnNotFound(peer, message)
-	case *msg.Reject:
-		return client.msgHandler.OnReject(peer, message)
+		return client.msgHandler.OnNotFound(peer, msg)
 	default:
 		return errors.New("handle message unknown type")
 	}
 }
 
 func (client *SPVClientImpl) OnPeerEstablish(peer *net.Peer) {
-	log.Debug()
 	client.msgHandler.OnPeerEstablish(peer)
-
-	// Start heartbeat
-	go client.heartBeat(peer)
 }
 
 func (client *SPVClientImpl) OnPing(peer *net.Peer, p *msg.Ping) error {
-	peer.SetHeight(p.Nonce)
+	peer.SetHeight(p.Height)
 	// Return pong message to peer
-	peer.Send(msg.NewPong(uint32(client.PeerManager().Local().Height())))
+	go peer.Send(msg.NewPong(uint32(client.PeerManager().Local().Height())))
 	return nil
 }
 
 func (client *SPVClientImpl) OnPong(peer *net.Peer, p *msg.Pong) error {
-	peer.SetHeight(p.Nonce)
+	peer.SetHeight(p.Height)
 	return nil
 }
 
-func (client *SPVClientImpl) heartBeat(peer *net.Peer) {
+func (client *SPVClientImpl) keepUpdate() {
 	ticker := time.NewTicker(time.Second * net.InfoUpdateDuration)
 	defer ticker.Stop()
 	for range ticker.C {
-		// Quit if peer disconnected
-		if !client.PeerManager().Exist(peer) {
-			goto QUIT
-		}
 
-		// Disconnect peer if keep alive timeout
-		if time.Now().After(peer.LastActive().Add(time.Second * net.InfoUpdateDuration * net.KeepAliveTimeout)) {
-			peer.Disconnect()
-			goto QUIT
-		}
+		// Update peers info
+		for _, peer := range client.PeerManager().ConnectedPeers() {
+			if peer.State() == p2p.ESTABLISH {
 
-		// Send ping message to peer
-		if peer.State() == p2p.ESTABLISH {
-			go peer.Send(msg.NewPing(uint32(client.PeerManager().Local().Height())))
+				// Disconnect inactive peer
+				if peer.LastActive().Before(
+					time.Now().Add(-time.Second * net.InfoUpdateDuration * net.KeepAliveTimeout)) {
+					client.PeerManager().DisconnectPeer(peer)
+					continue
+				}
+
+				// Send ping message to peer
+				go peer.Send(msg.NewPing(uint32(client.PeerManager().Local().Height())))
+			}
 		}
 	}
-QUIT:
 }

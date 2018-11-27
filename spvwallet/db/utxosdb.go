@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const CreateUTXOsDB = `CREATE TABLE IF NOT EXISTS UTXOs(
@@ -21,7 +21,7 @@ type UTXOsDB struct {
 	*sql.DB
 }
 
-func NewUTXOsDB(db *sql.DB, lock *sync.RWMutex) (*UTXOsDB, error) {
+func NewUTXOsDB(db *sql.DB, lock *sync.RWMutex) (UTXOs, error) {
 	_, err := db.Exec(CreateUTXOsDB)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func NewUTXOsDB(db *sql.DB, lock *sync.RWMutex) (*UTXOsDB, error) {
 }
 
 // put a utxo to database
-func (db *UTXOsDB) Put(hash *common.Uint168, utxo *UTXO) error {
+func (db *UTXOsDB) Put(hash *Uint168, utxo *UTXO) error {
 	db.Lock()
 	defer db.Unlock()
 
@@ -48,7 +48,7 @@ func (db *UTXOsDB) Put(hash *common.Uint168, utxo *UTXO) error {
 }
 
 // get a utxo from database
-func (db *UTXOsDB) Get(outPoint *core.OutPoint) (*UTXO, error) {
+func (db *UTXOsDB) Get(outPoint *OutPoint) (*UTXO, error) {
 	db.RLock()
 	defer db.RUnlock()
 
@@ -61,8 +61,8 @@ func (db *UTXOsDB) Get(outPoint *core.OutPoint) (*UTXO, error) {
 		return nil, err
 	}
 
-	var value *common.Fixed64
-	value, err = common.Fixed64FromBytes(valueBytes)
+	var value *Fixed64
+	value, err = Fixed64FromBytes(valueBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (db *UTXOsDB) Get(outPoint *core.OutPoint) (*UTXO, error) {
 }
 
 // get utxos of the given script hash from database
-func (db *UTXOsDB) GetAddrAll(hash *common.Uint168) ([]*UTXO, error) {
+func (db *UTXOsDB) GetAddrAll(hash *Uint168) ([]*UTXO, error) {
 	db.RLock()
 	defer db.RUnlock()
 
@@ -110,12 +110,12 @@ func (db *UTXOsDB) getUTXOs(rows *sql.Rows) ([]*UTXO, error) {
 			return utxos, err
 		}
 
-		outPoint, err := core.OutPointFromBytes(opBytes)
+		outPoint, err := OutPointFromBytes(opBytes)
 		if err != nil {
 			return utxos, err
 		}
-		var value *common.Fixed64
-		value, err = common.Fixed64FromBytes(valueBytes)
+		var value *Fixed64
+		value, err = Fixed64FromBytes(valueBytes)
 		if err != nil {
 			return utxos, err
 		}
@@ -126,7 +126,7 @@ func (db *UTXOsDB) getUTXOs(rows *sql.Rows) ([]*UTXO, error) {
 }
 
 // delete a utxo from database
-func (db *UTXOsDB) Delete(outPoint *core.OutPoint) error {
+func (db *UTXOsDB) Delete(outPoint *OutPoint) error {
 	db.Lock()
 	defer db.Unlock()
 

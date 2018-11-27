@@ -3,22 +3,22 @@ package net
 import (
 	"sync"
 
-	. "github.com/ioeX/ioeX.Utility/p2p"
+	. "github.com/ioeXNetwork/ioeX.Utility/p2p"
 )
 
 type Peers struct {
-	syncPeerLock *sync.RWMutex
+	syncPeerLock *sync.Mutex
 	syncPeer     *Peer
 
-	local     *Peer
 	peersLock *sync.RWMutex
+	local     *Peer
 	peers     map[uint64]*Peer
 }
 
 func newPeers(localPeer *Peer) *Peers {
 	peers := new(Peers)
 	peers.local = localPeer
-	peers.syncPeerLock = new(sync.RWMutex)
+	peers.syncPeerLock = new(sync.Mutex)
 	peers.peersLock = new(sync.RWMutex)
 	peers.peers = make(map[uint64]*Peer)
 	return peers
@@ -91,6 +91,10 @@ func (p *Peers) GetBestPeer() *Peer {
 	p.peersLock.RLock()
 	defer p.peersLock.RUnlock()
 
+	return p.getBestPeer()
+}
+
+func (p *Peers) getBestPeer() *Peer {
 	var bestPeer *Peer
 	for _, peer := range p.peers {
 
@@ -128,7 +132,7 @@ func (p *Peers) Broadcast(msg Message) {
 			continue
 		}
 
-		peer.Send(msg)
+		go peer.Send(msg)
 	}
 }
 
@@ -144,15 +148,15 @@ func (p *Peers) GetSyncPeer() *Peer {
 	defer p.syncPeerLock.Unlock()
 
 	if p.syncPeer == nil {
-		p.syncPeer = p.GetBestPeer()
+		p.syncPeer = p.getBestPeer()
 	}
 
 	return p.syncPeer
 }
 
 func (p *Peers) IsSyncPeer(peer *Peer) bool {
-	p.syncPeerLock.RLock()
-	defer p.syncPeerLock.RUnlock()
+	p.syncPeerLock.Lock()
+	defer p.syncPeerLock.Unlock()
 
 	if p.syncPeer == nil || peer == nil {
 		return false

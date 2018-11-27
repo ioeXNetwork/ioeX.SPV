@@ -2,13 +2,13 @@ package rpc
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/ioeX/ioeX.MainChain/core"
+	"encoding/hex"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
 )
 
 type Client struct {
@@ -32,7 +32,7 @@ func (client *Client) NotifyNewAddress(hash []byte) error {
 	return nil
 }
 
-func (client *Client) SendTransaction(tx *core.Transaction) error {
+func (client *Client) SendTransaction(tx *Transaction) error {
 	buf := new(bytes.Buffer)
 	tx.Serialize(buf)
 	resp := client.send(

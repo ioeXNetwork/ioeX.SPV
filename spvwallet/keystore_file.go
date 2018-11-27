@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const (
@@ -29,7 +29,7 @@ type KeystoreFile struct {
 
 func CreateKeystoreFile() (*KeystoreFile, error) {
 
-	if common.FileExisted(KeystoreFilename) {
+	if FileExisted(KeystoreFilename) {
 		return nil, errors.New("key store file already exist")
 	}
 
@@ -53,24 +53,24 @@ func OpenKeystoreFile() (*KeystoreFile, error) {
 }
 
 func (store *KeystoreFile) SetIV(iv []byte) {
-	store.IV = common.BytesToHexString(iv)
+	store.IV = BytesToHexString(iv)
 }
 
 func (store *KeystoreFile) SetPasswordHash(passwordHash []byte) {
-	store.PasswordHash = common.BytesToHexString(passwordHash)
+	store.PasswordHash = BytesToHexString(passwordHash)
 }
 
 func (store *KeystoreFile) SetMasterKeyEncrypted(masterKeyEncrypted []byte) {
-	store.MasterKeyEncrypted = common.BytesToHexString(masterKeyEncrypted)
+	store.MasterKeyEncrypted = BytesToHexString(masterKeyEncrypted)
 }
 
 func (store *KeystoreFile) SetPrivateKeyEncrypted(privateKeyEncrypted []byte) {
-	store.PrivateKeyEncrypted = common.BytesToHexString(privateKeyEncrypted)
+	store.PrivateKeyEncrypted = BytesToHexString(privateKeyEncrypted)
 }
 
 func (store *KeystoreFile) GetIV() ([]byte, error) {
 
-	iv, err := common.HexStringToBytes(store.IV)
+	iv, err := HexStringToBytes(store.IV)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (store *KeystoreFile) GetIV() ([]byte, error) {
 
 func (store *KeystoreFile) GetPasswordHash() ([]byte, error) {
 
-	passwordHash, err := common.HexStringToBytes(store.PasswordHash)
+	passwordHash, err := HexStringToBytes(store.PasswordHash)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (store *KeystoreFile) GetPasswordHash() ([]byte, error) {
 
 func (store *KeystoreFile) GetMasterKeyEncrypted() ([]byte, error) {
 
-	masterKeyEncrypted, err := common.HexStringToBytes(store.MasterKeyEncrypted)
+	masterKeyEncrypted, err := HexStringToBytes(store.MasterKeyEncrypted)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (store *KeystoreFile) GetMasterKeyEncrypted() ([]byte, error) {
 
 func (store *KeystoreFile) GetPrivetKeyEncrypted() ([]byte, error) {
 
-	privateKeyEncrypted, err := common.HexStringToBytes(store.PrivateKeyEncrypted)
+	privateKeyEncrypted, err := HexStringToBytes(store.PrivateKeyEncrypted)
 	if err != nil {
 		return nil, err
 	}

@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ioeX/ioeX.MainChain/core"
-	"github.com/ioeX/ioeX.Utility/common"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type UTXO struct {
 	// Previous txid and output index
-	Op core.OutPoint
+	Op OutPoint
 
 	// The higher the better
-	Value common.Fixed64
+	Value Fixed64
 
 	// The utxo locked height
 	LockTime uint32
@@ -25,7 +25,7 @@ type UTXO struct {
 func (utxo *UTXO) String() string {
 	return fmt.Sprint(
 		"UTXO:{",
-		"Op:{TxId:", utxo.Op.TxID.String(), ", Index:", utxo.Op.Index, "},",
+		"Op:{TxID:", utxo.Op.TxID.String(), ", Index:", utxo.Op.Index, "},",
 		"Value:", utxo.Value.String(), ",",
 		"LockTime:", utxo.LockTime, ",",
 		"AtHeight:", utxo.AtHeight,
