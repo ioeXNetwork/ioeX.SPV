@@ -100,13 +100,13 @@ glide version 0.13.1
 ```
 If you cannot see the version number, there must be something wrong when install.
 
-### Clone source code to `$GOPATH/src/github.com/ioeX/` folder
-Make sure you are in the folder of `$GOPATH/src/github.com/ioeX/`
+### Clone source code to `$GOPATH/src/github.com/ioeXNetwork/` folder
+Make sure you are in the folder of `$GOPATH/src/github.com/ioeXNetwork/`
 ```shell
-$ git clone https://github.com/ioeX/ioeX.SPV.git
+$ git clone https://github.com/ioeXNetwork/ioeX.SPV.git
 ```
 
-If clone works successfully, you should see folder structure like $GOPATH/src/github.com/ioeX/ioeX.SPV/makefile
+If clone works successfully, you should see folder structure like $GOPATH/src/github.com/ioeXNetwork/ioeX.SPV/makefile
 
 ### Glide install
 
@@ -115,8 +115,8 @@ Run `glide update && glide install` to download project dependencies.
 ### Install bolt and sqlite database
 This will make the `make` progress far more fester.
 ```shell
-$ go install github.com/ioeX/ioeX.SPV/vendor/github.com/boltdb/bolt
-$ go install github.com/ioeX/ioeX.SPV/vendor/github.com/mattn/go-sqlite3
+$ go install github.com/ioeXNetwork/ioeX.SPV/vendor/github.com/boltdb/bolt
+$ go install github.com/ioeXNetwork/ioeX.SPV/vendor/github.com/mattn/go-sqlite3
 ```
 
 ### Make
