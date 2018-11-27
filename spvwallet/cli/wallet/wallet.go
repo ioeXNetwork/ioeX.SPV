@@ -3,8 +3,8 @@ package wallet
 import (
 	"fmt"
 
-	. "github.com/ioeX/ioeX.SPV/spvwallet"
-	. "github.com/ioeX/ioeX.SPV/spvwallet/cli"
+	. "github.com/ioeXNetwork/ioeX.SPV/spvwallet"
+	. "github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli"
 
 	"github.com/urfave/cli"
 )

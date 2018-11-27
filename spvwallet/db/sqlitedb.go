@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/ioeX/ioeX.Utility/common"
 )
 
 const (
@@ -145,7 +145,7 @@ func (db *SQLiteDB) rollbackTx(txId *common.Uint256) error {
 
 	// Get unconfirmed STXOs
 	rows, err := db.Query(
-		"SELECT OutPoint, Value, LockTime, AtHeight, SpendHash, SpendHeight FROM STXOs WHERE SpendHeight=?",0)
+		"SELECT OutPoint, Value, LockTime, AtHeight, SpendHash, SpendHeight FROM STXOs WHERE SpendHeight=?", 0)
 	if err != nil {
 		return err
 	}

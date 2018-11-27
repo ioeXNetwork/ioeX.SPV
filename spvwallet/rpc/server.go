@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 func InitServer() *Server {

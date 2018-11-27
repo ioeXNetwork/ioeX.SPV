@@ -1,22 +1,22 @@
 package transaction
 
 import (
-	"os"
-	"fmt"
-	"bytes"
 	"bufio"
+	"bytes"
 	"errors"
-	"strings"
-	"strconv"
+	"fmt"
 	"io/ioutil"
+	"os"
+	"strconv"
+	"strings"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	. "github.com/ioeX/ioeX.SPV/spvwallet/cli"
-	walt "github.com/ioeX/ioeX.SPV/spvwallet"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	walt "github.com/ioeXNetwork/ioeX.SPV/spvwallet"
+	. "github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli"
 
-	"github.com/ioeX/ioeX.MainChain/core"
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/crypto"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/crypto"
 	"github.com/urfave/cli"
 )
 

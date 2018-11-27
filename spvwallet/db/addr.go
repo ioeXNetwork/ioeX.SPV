@@ -1,6 +1,6 @@
 package db
 
-import "github.com/ioeX/ioeX.Utility/common"
+import "github.com/ioeXNetwork/ioeX.Utility/common"
 
 const (
 	TypeMaster = 0

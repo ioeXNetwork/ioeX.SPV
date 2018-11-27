@@ -3,11 +3,11 @@ package sdk
 import (
 	"time"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/crypto"
-	"github.com/ioeX/ioeX.Utility/p2p"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/crypto"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p"
 
-	ioex "github.com/ioeX/ioeX.MainChain/core"
+	ioex "github.com/ioeXNetwork/ioeX.MainChain/core"
 )
 
 const (

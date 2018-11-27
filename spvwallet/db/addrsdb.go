@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const CreateAddrsDB = `CREATE TABLE IF NOT EXISTS Addrs(

@@ -1,6 +1,6 @@
 package store
 
-import "github.com/ioeX/ioeX.Utility/common"
+import "github.com/ioeXNetwork/ioeX.Utility/common"
 
 type HeaderStore interface {
 	// Save a header to database

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"math/big"
 
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
 )
 
 type StoreHeader struct {

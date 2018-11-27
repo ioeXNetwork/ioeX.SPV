@@ -1,7 +1,7 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.SPV/spvwallet"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet"
 )
 
 type KeystoreImpl struct {

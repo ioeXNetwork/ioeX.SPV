@@ -3,8 +3,8 @@ package spvwallet
 import (
 	"sync"
 
-	. "github.com/ioeX/ioeX.SPV/spvwallet/db"
-	"github.com/ioeX/ioeX.Utility/common"
+	. "github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type Database interface {

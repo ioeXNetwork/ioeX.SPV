@@ -1,7 +1,7 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
 )
 
 /*
@@ -13,7 +13,7 @@ type P2PClient interface {
 	InitLocalPeer(func(*net.Peer))
 
 	// Set the message handler
-	SetMessageHandler(handler net.MessageHandler)
+	SetMessageHandler(handler func() net.MessageHandler)
 
 	// Start the P2P client
 	Start()

@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	. "github.com/ioeX/ioeX.MainChain/bloom"
-	. "github.com/ioeX/ioeX.MainChain/core"
+	. "github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	. "github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 var spv SPVService
@@ -96,7 +96,7 @@ func TestGetListenerKey(t *testing.T) {
 }
 
 func TestNewSPVService(t *testing.T) {
-	log.Init(log.LevelDebug)
+	log.Init(0, 5, 20)
 
 	var id = make([]byte, 8)
 	var clientId uint64

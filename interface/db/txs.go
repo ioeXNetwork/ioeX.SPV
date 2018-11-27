@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 
 	"github.com/boltdb/bolt"
 )

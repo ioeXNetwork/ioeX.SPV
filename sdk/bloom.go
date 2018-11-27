@@ -1,9 +1,9 @@
 package sdk
 
 import (
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 // Create a new bloom filter instance

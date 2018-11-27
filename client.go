@@ -3,11 +3,11 @@ package main
 import (
 	"os"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/spvwallet/cli/account"
-	"github.com/ioeX/ioeX.SPV/spvwallet/cli/transaction"
-	"github.com/ioeX/ioeX.SPV/spvwallet/cli/wallet"
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/account"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/transaction"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/cli/wallet"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
 
 	"github.com/urfave/cli"
 )

@@ -2,7 +2,7 @@ package db
 
 import (
 	"fmt"
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type STXO struct {

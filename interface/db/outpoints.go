@@ -3,9 +3,9 @@ package db
 import (
 	"sync"
 
-	"github.com/ioeX/ioeX.MainChain/core"
-	"github.com/ioeX/ioeX.Utility/common"
 	"github.com/boltdb/bolt"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 var (

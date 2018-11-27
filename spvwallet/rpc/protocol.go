@@ -3,7 +3,7 @@ package rpc
 import (
 	"fmt"
 
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
 )
 
 var (

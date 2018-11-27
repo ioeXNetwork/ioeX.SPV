@@ -3,7 +3,7 @@ package sdk
 import (
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 /*

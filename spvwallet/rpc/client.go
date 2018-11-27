@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
 )
 
 type Client struct {

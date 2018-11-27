@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/binary"
 	"os"
 	"os/signal"
-	"encoding/binary"
 
-	"github.com/ioeX/ioeX.SPV/spvwallet"
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
 )
 
 func main() {

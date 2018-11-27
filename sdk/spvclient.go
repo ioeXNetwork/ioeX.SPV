@@ -1,9 +1,9 @@
 package sdk
 
 import (
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
 
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
 /*
@@ -14,7 +14,7 @@ you can see how to extend the SDK and create your own apps.
 */
 type SPVClient interface {
 	// Set the message handler to extend the client
-	SetMessageHandler(SPVMessageHandler)
+	SetMessageHandler(func() SPVMessageHandler)
 
 	// Start the client
 	Start()

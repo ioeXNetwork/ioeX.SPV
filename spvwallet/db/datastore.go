@@ -1,8 +1,8 @@
 package db
 
 import (
-	"github.com/ioeX/ioeX.MainChain/core"
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type DataStore interface {

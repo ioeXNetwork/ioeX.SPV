@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
 )
 
 func (server *Server) notifyNewAddress(req Req) Resp {

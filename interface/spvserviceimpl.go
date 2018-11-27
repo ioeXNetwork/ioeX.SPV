@@ -8,15 +8,15 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/ioeX/ioeX.SPV/interface/db"
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/sdk"
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.SPV/interface/db"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/sdk"
+	"github.com/ioeXNetwork/ioeX.SPV/store"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
 type SPVServiceImpl struct {

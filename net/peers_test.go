@@ -1,9 +1,9 @@
 package net
 
 import (
+	"github.com/ioeXNetwork/ioeX.Utility/p2p"
 	"math/rand"
 	"testing"
-	"github.com/ioeX/ioeX.Utility/p2p"
 )
 
 func TestPeers_GetSyncPeer(t *testing.T) {

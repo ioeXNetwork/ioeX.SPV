@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 const CreateUTXOsDB = `CREATE TABLE IF NOT EXISTS UTXOs(

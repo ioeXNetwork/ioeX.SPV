@@ -1,7 +1,7 @@
 package sdk
 
 import (
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
 )
 
 /*

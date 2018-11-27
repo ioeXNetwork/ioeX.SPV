@@ -1,10 +1,10 @@
 package net
 
 import (
-	"time"
 	"sort"
+	"time"
 
-	"github.com/ioeX/ioeX.Utility/p2p"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p"
 )
 
 const (
@@ -66,7 +66,7 @@ func (ka *knownAddress) chance() float64 {
 // isBad returns true if the address in question has not been seen in over a month
 func (ka *knownAddress) isBad() bool {
 	// Over a month old?
-	if ka.Time < time.Now().Add(-1 * numMissingDays * time.Hour * 24).UnixNano() {
+	if ka.Time < time.Now().Add(-1*numMissingDays*time.Hour*24).UnixNano() {
 		return true
 	}
 

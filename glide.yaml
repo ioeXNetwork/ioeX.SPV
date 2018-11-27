@@ -1,4 +1,4 @@
-package: github.com/ioeX/ioeX.SPV
+package: github.com/ioeXNetwork/ioeX.SPV
 import:
 - package: golang.org/x/crypto
   repo:  https://github.com/golang/crypto
@@ -7,8 +7,8 @@ import:
 - package: github.com/howeyc/gopass
 - package: github.com/boltdb/bolt
 - package: github.com/cevaris/ordered_map
-- package: github.com/ioeX/ioeX.Utility
-- package: github.com/ioeX/ioeX.MainChain
+- package: github.com/ioeXNetwork/ioeX.Utility
+- package: github.com/ioeXNetwork/ioeX.MainChain
   subpackages:
   - bloom
   - core

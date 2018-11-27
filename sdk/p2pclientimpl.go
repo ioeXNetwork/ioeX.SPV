@@ -2,7 +2,7 @@ package sdk
 
 import (
 	"errors"
-	"github.com/ioeX/ioeX.SPV/net"
+	"github.com/ioeXNetwork/ioeX.SPV/net"
 )
 
 type P2PClientImpl struct {

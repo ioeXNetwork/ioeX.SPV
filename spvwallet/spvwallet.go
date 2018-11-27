@@ -4,15 +4,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/sdk"
-	"github.com/ioeX/ioeX.SPV/spvwallet/config"
-	"github.com/ioeX/ioeX.SPV/spvwallet/db"
-	"github.com/ioeX/ioeX.SPV/spvwallet/rpc"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/sdk"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
+	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/rpc"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.Utility/p2p/msg"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/p2p/msg"
 )
 
 const (

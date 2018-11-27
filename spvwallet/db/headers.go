@@ -1,15 +1,15 @@
 package db
 
 import (
-	"errors"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.SPV/store"
-	"github.com/ioeX/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 
 	"github.com/boltdb/bolt"
 	"github.com/cevaris/ordered_map"

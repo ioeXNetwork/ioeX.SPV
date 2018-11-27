@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/boltdb/bolt"
-	"github.com/ioeX/ioeX.MainChain/bloom"
 	"encoding/binary"
+	"github.com/boltdb/bolt"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
 )
 
 type Proofs interface {

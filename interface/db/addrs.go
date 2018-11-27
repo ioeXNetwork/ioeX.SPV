@@ -3,9 +3,9 @@ package db
 import (
 	"sync"
 
-	"github.com/ioeX/ioeX.SPV/sdk"
+	"github.com/ioeXNetwork/ioeX.SPV/sdk"
 
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 
 	"github.com/boltdb/bolt"
 )

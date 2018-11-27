@@ -6,11 +6,11 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ioeX/ioeX.SPV/log"
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.SPV/log"
+	"github.com/ioeXNetwork/ioeX.SPV/store"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type ChainState int

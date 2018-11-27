@@ -5,7 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 
-	. "github.com/ioeX/ioeX.Utility/crypto"
+	. "github.com/ioeXNetwork/ioeX.Utility/crypto"
 )
 
 // Generate a ECC private key by the given curve

@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 type QueueItem struct {

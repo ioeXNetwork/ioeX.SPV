@@ -1,11 +1,11 @@
 package _interface
 
 import (
-	"github.com/ioeX/ioeX.SPV/store"
+	"github.com/ioeXNetwork/ioeX.SPV/store"
 
-	"github.com/ioeX/ioeX.Utility/common"
-	"github.com/ioeX/ioeX.MainChain/bloom"
-	"github.com/ioeX/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.MainChain/bloom"
+	"github.com/ioeXNetwork/ioeX.MainChain/core"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 )
 
 /*

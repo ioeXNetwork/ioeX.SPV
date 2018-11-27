@@ -2,7 +2,7 @@ package spvwallet
 
 import (
 	"crypto/rand"
-	"github.com/ioeX/ioeX.Utility/common"
+	"github.com/ioeXNetwork/ioeX.Utility/common"
 	"testing"
 )
 
