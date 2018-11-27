@@ -1,4 +1,4 @@
-package cli
+package client
 
 import (
 	"bufio"
@@ -8,8 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	walt "github.com/ioeXNetwork/ioeX.SPV/spvwallet"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/db"
+	"github.com/ioeXNetwork/ioeX.SPV/wallet/sutil"
 
 	"github.com/howeyc/gopass"
 	"github.com/ioeXNetwork/ioeX.Utility/common"
@@ -61,7 +60,7 @@ func ShowAccountInfo(password []byte) error {
 		return err
 	}
 
-	keyStore, err := walt.OpenKeystore(password)
+	keyStore, err := OpenKeystore(password)
 	if err != nil {
 		return err
 	}
@@ -87,7 +86,7 @@ func ShowAccountInfo(password []byte) error {
 	return nil
 }
 
-func SelectAccount(wallet walt.Wallet) (string, error) {
+func SelectAccount(wallet *Wallet) (string, error) {
 	addrs, err := wallet.GetAddrs()
 	if err != nil || len(addrs) == 0 {
 		return "", errors.New("fail to load wallet addresses")
@@ -115,18 +114,18 @@ func SelectAccount(wallet walt.Wallet) (string, error) {
 	return addrs[index].String(), nil
 }
 
-func ShowAccounts(addrs []*db.Addr, newAddr *common.Uint168, wallet walt.Wallet) error {
+func ShowAccounts(addrs []*sutil.Addr, newAddr *common.Uint168, wallet *Wallet) error {
 	// print header
 	fmt.Printf("%5s %34s %-20s%22s %6s\n", "INDEX", "ADDRESS", "BALANCE", "(LOCKED)", "TYPE")
 	fmt.Println("-----", strings.Repeat("-", 34), strings.Repeat("-", 42), "------")
 
-	currentHeight := wallet.ChainHeight()
+	currentHeight := wallet.BestHeight()
 	for i, addr := range addrs {
 		available := common.Fixed64(0)
 		locked := common.Fixed64(0)
 		UTXOs, err := wallet.GetAddressUTXOs(addr.Hash())
 		if err != nil {
-			return errors.New("get " + addr.String() + " UTXOs failed")
+			return fmt.Errorf("get %s UTXOs failed, %s", addr, err)
 		}
 		for _, utxo := range UTXOs {
 			if utxo.LockTime >= currentHeight || utxo.AtHeight == 0 {
