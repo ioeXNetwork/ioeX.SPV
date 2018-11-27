@@ -1,34 +1,15 @@
 package main
 
 import (
-	"encoding/binary"
 	"os"
 	"os/signal"
-
-	"github.com/ioeXNetwork/ioeX.SPV/log"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet"
-	"github.com/ioeXNetwork/ioeX.SPV/spvwallet/config"
 )
 
 func main() {
-	// Initiate log
-	log.Init(
-		config.Values().PrintLevel,
-		config.Values().MaxPerLogSize,
-		config.Values().MaxLogsSize,
-	)
-
-	file, err := spvwallet.OpenKeystoreFile()
-	if err != nil {
-		log.Error("Keystore.dat file not found, please create your wallet using ioex-wallet first")
-		os.Exit(0)
-	}
-
 	// Initiate SPV service
-	iv, _ := file.GetIV()
-	wallet, err := spvwallet.Init(binary.LittleEndian.Uint64(iv), config.Values().SeedList)
+	w, err := NewWallet()
 	if err != nil {
-		log.Error("Initiate SPV service failed,", err)
+		waltlog.Error("Initiate SPV service failed,", err)
 		os.Exit(0)
 	}
 
@@ -38,13 +19,13 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			log.Trace("SPVWallet shutting down...")
-			wallet.Stop()
+			waltlog.Debug("Wallet shutting down...")
+			w.Stop()
 			stop <- 1
 		}
 	}()
 
-	wallet.Start()
+	w.Start()
 
 	<-stop
 }
