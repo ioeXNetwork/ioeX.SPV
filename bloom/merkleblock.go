@@ -103,7 +103,7 @@ func NewMerkleBlock(block *util.Block, filter *Filter) (*msg.MerkleBlock, []uint
 	// Find and keep track of any transactions that match the filter.
 	var matchedIndexes []uint32
 	switch block.Header.BlockHeader.(type) {
-	case *util.ElaHeader:
+	case *util.IOEXHeader:
 		for index, tx := range block.Transactions {
 			if filter.MatchElaTxAndUpdate(tx.(*core.Transaction)) {
 				mBlock.MatchedBits = append(mBlock.MatchedBits, 0x01)
